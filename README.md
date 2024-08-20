@@ -1,10 +1,9 @@
 # A functional subpopulation of human glioma associated macrophages linked to malignant glioma progression 
 
-This GitHub repository includes all scripts used to perform the analyses in the paper entitled "A functional subpopulation of human glioma associated macrophages linked to malignant glioma progression". For further details please consult the methods section of the manuscript.
+This GitHub repository includes all scripts used to perform the analyses in the paper entitled "A functional subpopulation of human glioma associated macrophages linked to malignant glioma progression". For further details please consult the methods section of the manuscript. 
 
-## Data Pre-processing
-
-The folder "Data Pre-processing" contains all the initial quality control steps performed prior to the main analysis. 
+## Data Preprocessing
+The folder "Data Preprocessing" contains all the initial quality control steps performed prior to the main analysis. This Folder contains all the scripts for importing the cellranger outputs into Seurat, QC for scRNA-seq and scATAC-seq, matching scRNA and scATAC cells, running the FigR package, and generating all UMAPs (Figure 1).
 
 ## Figure 1
 ### UMAP of single cell RNA and ATAC cells (Figure 1B)
