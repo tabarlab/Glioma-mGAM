@@ -58,7 +58,7 @@ ax.yaxis.set_tick_params(pad=3,
                          labelsize=12,   
                          bottom=True) 
 
-ax.set_ylabel("DN                                 DP", size=15, weight='bold')
+ax.set_ylabel("mGAM-" + " "*33 + "mGAM+", size=15, weight='bold')
 
 ## Bottom plot
 ax2.spines['top'].set_visible(False)
