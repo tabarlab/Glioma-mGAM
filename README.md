@@ -7,7 +7,7 @@ This GitHub repository includes all scripts used to perform the analyses in the 
 The folder "Data Preprocessing" contains all the initial quality control steps performed prior to the main analysis. This Folder contains all the scripts for importing the cellranger outputs into Seurat, QC for scRNA-seq and scATAC-seq, matching scRNA and scATAC cells, running the FigR package, and generating all UMAPs (Figure 1).
 
 ## Figure 1
-
+The Folder "Figure 1" conains all the scripts necessary to reproduce the 
 ### UMAP of single cell RNA and ATAC cells (Figure 1B)
 
 ### Dotplot to show cell type marker expression levels (Figure 1C)
