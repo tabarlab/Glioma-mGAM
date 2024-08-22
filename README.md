@@ -11,6 +11,7 @@ The folder "Figure 1" contains all the scripts needed to reproduce the different
 
 ## Figure 2
 The folder "Figure 2" contains all the scripts needed to perform the MiloR and FigR visualizations using the FigR analysis results from "Data Preprocessing/04 - optMatch Wrapper and FigR Analysis". The scripts are related to the following panels from Figure 2: Consensus clustering of proprietary and public datasets (Figure 2A), Alluvial plot showing cell type calling between different public reference sets (Figure 2B), Alluvial plot showing Cell type calling for cells originating from wildtype, mutant and normal brain samples using GBMap reference (Figure 2C), Consensus clustering of proprietary GAMs/myeloid cells with public datasets (Figure 2E), Differential abundance testing using MiloR on consensus dataset (Figure 2F), Optmatch and FigR on differentially abundant populations (Figure 2G), FigR plot showing DORC enrichment between different conditions (Figure 2H).
+
 ## Figure 3
 
 ### Gene regulatory network showing DORC relationships in all 3 conditions (Figure 3A)
