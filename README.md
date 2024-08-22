@@ -2,38 +2,15 @@
 
 This GitHub repository includes all scripts used to perform the analyses in the paper entitled "A functional subpopulation of human glioma associated macrophages linked to malignant glioma progression". For further details please consult the methods section of the manuscript.
 
-## Data Preprocessing
-
-The folder "Data Preprocessing" contains all the initial quality control steps performed prior to the main analysis. This Folder contains all the scripts for importing the cellranger outputs into Seurat, QC for scRNA-seq and scATAC-seq, matching scRNA and scATAC cells, running the FigR package, and generating all UMAPs (Figure 1).
+## Data Processing and Analysis
+The folder "Data Processing and Analysis" contains all the initial quality control steps performed prior to the main analysis, followed by the downstream scRNA, scATAC, MiloR, optMatch, and FigR. This Folder contains all the scripts for importing the cellranger outputs into Seurat, QC for scRNA-seq and scATAC-seq and dowstream analyses, MiloR analysis identifying "archetypal" cells, matching scRNA and scATAC cells, and running the optMatch and FigR analysis. 
+This Folder also contains the scripts needed to perform the bulk RNA-seq analysis. 
 
 ## Figure 1
-The Folder "Figure 1" conains all the scripts necessary to reproduce the 
-### UMAP of single cell RNA and ATAC cells (Figure 1B)
-
-### Dotplot to show cell type marker expression levels (Figure 1C)
-
-### Gene Ontology for highly variable genes between wildtype, mutant and normal brain samples (Figure 1E)
-
-### Gene expression clustering and heatmap showing genes between wildtype, mutant and normal brain myeloid populations (Figure 1F)
-
-### Pairwise gene expression correlation between wildtype, mutant and normal brain samples (Figure 1G)
+The folder "Figure 1" contains all the scripts needed to reproduce the different panels from Figure 1: UMAP of single cell RNA and ATAC cells (Figure 1B), Dot plot to show cell type marker expression levels (Figure 1C), Differential gene expression analysis across wildtype, mutant and normal brain samples (Related to Figure 1E), Gene expression clustering and heatmap showing genes between wildtype, mutant and normal brain myeloid populations (Figure 1F), and gene expression correlation between wildtype, mutant and normal brain samples (Figure 1G).
 
 ## Figure 2
-
-### Consensus clustering of proprietary and public datasets (Figure 2A)
-
-### Alluvial plot showing cell type calling between different public reference sets (Figure 2B)
-
-### Alluvial plot showing Cell type calling for cells originating from wildtype, mutant and normal brain samples using GBMap reference (Figure 2C)
-
-### Consensus clustering of proprietary GAMs/myeloid cells with public datasets (Figure 2E)
-
-### Differential abundance testing using MiloR on consensus dataset (Figure 2F)
-
-### Optmatch and FigR on differentially abundant populations (Figure 2G)
-
-### FigR plot showing DORC enrichment between different conditions (Figure 2H)
-
+The folder "Figure 2" contains all the scripts needed to perform the MiloR and FigR visualizations using the FigR analysis results from "Data Preprocessing/04 - optMatch Wrapper and FigR Analysis". The scripts are related to the following panels from Figure 2: Consensus clustering of proprietary and public datasets (Figure 2A), Alluvial plot showing cell type calling between different public reference sets (Figure 2B), Alluvial plot showing Cell type calling for cells originating from wildtype, mutant and normal brain samples using GBMap reference (Figure 2C), Consensus clustering of proprietary GAMs/myeloid cells with public datasets (Figure 2E), Differential abundance testing using MiloR on consensus dataset (Figure 2F), Optmatch and FigR on differentially abundant populations (Figure 2G), FigR plot showing DORC enrichment between different conditions (Figure 2H).
 ## Figure 3
 
 ### Gene regulatory network showing DORC relationships in all 3 conditions (Figure 3A)
