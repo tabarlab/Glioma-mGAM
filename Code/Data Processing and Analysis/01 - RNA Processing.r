@@ -513,7 +513,7 @@ saveRDS(RNA_all,file="./RNA_all_unint.rds")
 
 
 p1<-DimPlot(object = RNA_all, label = FALSE) + theme(axis.line=element_blank(),axis.text.x=element_blank(), axis.text.y=element_blank(),axis.ticks=element_blank(), axis.title.x=element_blank(),
-          axis.title.y=element_blank(), legend.position = 'none', plot.title = element_blank()) #, raster = FALSE, group.by = 'celltype.stim') 
+          axis.title.y=element_blank(), legend.position = 'none', plot.title = element_blank()) 
 p2<-DimPlot(object = RNA_all, label = FALSE, group.by = "type") + theme(axis.line=element_blank(),axis.text.x=element_blank(), axis.text.y=element_blank(),axis.ticks=element_blank(), axis.title.x=element_blank(),
           axis.title.y=element_blank(), legend.position = 'none', plot.title = element_blank())
 p3<-DimPlot(object = RNA_all, label = TRUE, group.by = "batch")
@@ -524,7 +524,6 @@ p6<-DimPlot(object = RNA_all, label = TRUE, group.by = "patient")
 
 # Subset and subclustering
 RNA_GAMs <- subset(RNA_all, idents = c('combined_GAMs_WT', 'combined_GAMs_MUT'))
-RNA_GAMs <- readRDS("/data/tabar/SingleCell/RNA_GAMs_2.rds")
 
 # Run the standard workflow for visualization and clustering
 RNA_GAMs <- NormalizeData(RNA_GAMs)
@@ -547,16 +546,11 @@ features <- unique(GAM.markers.table.02$gene)
 
 p1 <- DotPlot(RNA_GAMs, features = gene_list_FigR, group.by = 'type') + RotatedAxis()
 
-
-saveRDS(RNA_GAMs,file="./RNA_GAMs.rds")
-
-
-#perform analysis similar to friedrich
-micr_list <- list(RNA_20201012,RNA_20201013,RNA_20201116,RNA_20201117,RNA_0218,RNA_0308,RNA_0330,RNA_0405,RNA_0603,RNA_1119,RNA_117am,RNA_0413,RNA_0628,RNA_0416,RNA_0428)
+sample_list <- SplitObject(RNA_GAMs, split.by = "patient")
 
   #sctransform
-  for (i in 1:length(micr_list)) {
-    micr_list[[i]] <- SCTransform(micr_list[[i]], 
+  for (i in 1:length(sample_list)) {
+    sample_list[[i]] <- SCTransform(sample_list[[i]], 
                                   variable.features.n = 10000,
                                   verbose = T,
                                   return.only.var.genes = F,
@@ -564,23 +558,21 @@ micr_list <- list(RNA_20201012,RNA_20201013,RNA_20201116,RNA_20201117,RNA_0218,R
     )
   }
 
-
-
-
 anchor_features <- grep("^(FOS|JUN|RP|ZFP36|EGR|MALAT1|XIST|HSP|MT-|HIST)", SelectIntegrationFeatures(micr_list, nfeatures = 5000), invert = T, value = T)
   
-  micr_list <- PrepSCTIntegration(object.list = micr_list, 
-                                  anchor.features = anchor_features, 
-                                  verbose = T)
-  
-  immune.anchors <- FindIntegrationAnchors(object.list = micr_list, 
-                                           normalization.method = "SCT",
-                                           dims = 1:20,
-                                           anchor.features = anchor_features)
-  
-saveRDS(immune.anchors,file = "./immune_anchors_int.rds")
-  immune.combined <- IntegrateData(anchorset = immune.anchors, 
-                                   normalization.method = "SCT", 
-                                   dims = 1:20,features = anchor_features[1:2000])
+sample_list <- PrepSCTIntegration(object.list = sample_list, 
+                                anchor.features = anchor_features, 
+                                verbose = T)
 
- 
+anchors <- FindIntegrationAnchors(object.list = sample_list, 
+                                          normalization.method = "SCT",
+                                          dims = 1:20,
+                                          anchor.features = anchor_features)
+
+RNA.combined <- IntegrateData(anchorset = anchors, 
+                                  normalization.method = "SCT", 
+                                  dims = 1:20,features = anchor_features[1:2000])
+
+
+saveRDS(RNA_GAMs,file="./RNA_GAMs.rds")
+saveRDS(RNA.combined,file="./RNA_GAMs_sct.rds")
