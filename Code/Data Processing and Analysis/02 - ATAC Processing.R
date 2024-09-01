@@ -5,7 +5,6 @@ library(EnsDb.Hsapiens.v86)
 library(ggplot2)
 library(patchwork)
 library(ComplexHeatmap)
-library(patchwork)
 library(ggrepel)
 set.seed(1234)
 
@@ -844,8 +843,6 @@ ATAC_MSK113 <- subset(
     TSS.enrichment > 2
 )
 
-
-
 # Batch 3
 
 # MSK107 ATAC script
@@ -1023,3 +1020,431 @@ ATAC_MSK104 <- subset(
     nucleosome_signal < 4 &
     TSS.enrichment > 2
 )
+
+################### Merging samples ###################
+
+# convert to genomic ranges
+gr.MSK109 <- StringToGRanges(row.names(combined_MSK109))
+gr.MSK108 <- StringToGRanges(row.names(combined_MSK108))
+gr.MSK101 <- StringToGRanges(row.names(combined_MSK101))
+gr.MSK102 <- StringToGRanges(row.names(combined_MSK102))
+gr.MSK115 <- StringToGRanges(row.names(ATAC_MSK115))
+gr.MSK114 <- StringToGRanges(row.names(ATAC_MSK114))
+gr.MSK110 <- StringToGRanges(row.names(ATAC_MSK110))
+gr.MSK111 <- StringToGRanges(row.names(ATAC_MSK111))
+gr.MSK112 <- StringToGRanges(row.names(ATAC_MSK112))
+gr.MSK103 <- StringToGRanges(row.names(ATAC_MSK103))
+gr.MSK113 <- StringToGRanges(row.names(ATAC_MSK113))
+gr.MSK104 <- StringToGRanges(row.names(ATAC_MSK104))
+gr.MSK106 <- StringToGRanges(row.names(ATAC_MSK106))
+gr.MSK107 <- StringToGRanges(row.names(ATAC_MSK107))
+gr.MSK105 <- StringToGRanges(row.names(ATAC_MSK105))
+gr.nb1 <- StringToGRanges(row.names(ATAC_NB1))
+gr.nb2 <- StringToGRanges(row.names(ATAC_NB2))
+
+# Create a unified set of peaks to quantify in each dataset
+combined.peaks <- reduce(x = c(gr.MSK109, gr.MSK108, gr.MSK101, gr.MSK102, gr.MSK115, gr.MSK114, gr.MSK110, gr.MSK111, gr.MSK112, gr.MSK103, gr.MSK113,gr.MSK104,gr.MSK106,gr.MSK107,gr.MSK105, gr.nb1, gr.nb2))
+
+# Filter out bad peaks based on length
+peakwidths <- width(combined.peaks)
+combined.peaks <- combined.peaks[peakwidths  < 10000 & peakwidths > 20]
+combined.peaks
+
+# adjust core usage for computationally heavy steps
+plan("multiprocess", workers = 8)
+options(future.globals.maxSize = 50 * 1024 ^ 3)
+
+feature_MSK101 <-FeatureMatrix(
+  fragments = Fragments(combined_MSK101[['peaks']]),
+  features = combined.peaks,
+  cells = colnames(combined_MSK101[['peaks']])
+)
+
+combined_MSK101[["merge.peaks"]]<-CreateChromatinAssay(feature_MSK101, fragments = Fragments(combined_MSK101[['merged']]))
+DefaultAssay(combined_MSK101)<-"merge.peaks"
+
+feature_MSK102 <-FeatureMatrix(
+  fragments = Fragments(combined_MSK102[['peaks']]),
+  features = combined.peaks,
+  cells = colnames(combined_MSK102[['peaks']])
+)
+
+combined_MSK102[["merge.peaks"]]<-CreateChromatinAssay(feature_MSK102, fragments = Fragments(combined_MSK102[['merged']]))
+DefaultAssay(combined_MSK102)<-"merge.peaks"
+
+feature_MSK108 <-FeatureMatrix(
+  fragments = Fragments(combined_MSK108[['peaks']]),
+  features = combined.peaks,
+  cells = colnames(combined_MSK108[['peaks']])
+)
+
+combined_MSK108[["merge.peaks"]]<-CreateChromatinAssay(feature_MSK108, fragments = Fragments(combined_MSK108[['peaks']]))
+DefaultAssay(combined_MSK108)<-"merge.peaks"
+
+feature_MSK109 <-FeatureMatrix(
+  fragments = Fragments(combined_MSK109[['peaks']]),
+  features = combined.peaks,
+  cells = colnames(combined_MSK109[['peaks']])
+)
+
+combined_MSK109[["merge.peaks"]]<-CreateChromatinAssay(feature_MSK109, fragments = Fragments(combined_MSK109[['merged']]))
+DefaultAssay(combined_MSK109)<-"merge.peaks"
+
+feature_MSK115 <-FeatureMatrix(
+  fragments = Fragments(ATAC_MSK115),
+  features = combined.peaks,
+  cells = colnames(ATAC_MSK115)
+)
+
+ATAC_MSK115[["merge.peaks"]]<-CreateChromatinAssay(feature_MSK115, fragments = Fragments(ATAC_MSK115))
+DefaultAssay(ATAC_MSK115)<-"merge.peaks"
+
+feature_MSK114 <-FeatureMatrix(
+  fragments = Fragments(ATAC_MSK114),
+  features = combined.peaks,
+  cells = colnames(ATAC_MSK114)
+)
+
+ATAC_MSK114[["merge.peaks"]]<-CreateChromatinAssay(feature_MSK114, fragments = Fragments(ATAC_MSK114))
+DefaultAssay(ATAC_MSK114)<-"merge.peaks"
+
+feature_MSK110 <-FeatureMatrix(
+  fragments = Fragments(ATAC_MSK110),
+  features = combined.peaks,
+  cells = colnames(ATAC_MSK110)
+)
+
+ATAC_MSK110[["merge.peaks"]]<-CreateChromatinAssay(feature_MSK110, fragments = Fragments(ATAC_MSK110))
+DefaultAssay(ATAC_MSK110)<-"merge.peaks"
+
+feature_MSK111 <-FeatureMatrix(
+  fragments = Fragments(ATAC_MSK111),
+  features = combined.peaks,
+  cells = colnames(ATAC_MSK111)
+)
+
+ATAC_MSK111[["merge.peaks"]]<-CreateChromatinAssay(feature_MSK111, fragments = Fragments(ATAC_MSK111))
+DefaultAssay(ATAC_MSK111)<-"merge.peaks"
+
+feature_MSK112 <-FeatureMatrix(
+  fragments = Fragments(ATAC_MSK112),
+  features = combined.peaks,
+  cells = colnames(ATAC_MSK112)
+)
+
+ATAC_MSK112[["merge.peaks"]]<-CreateChromatinAssay(feature_MSK112, fragments = Fragments(ATAC_MSK112))
+DefaultAssay(ATAC_MSK112)<-"merge.peaks"
+
+feature_MSK103 <-FeatureMatrix(
+  fragments = Fragments(ATAC_MSK103),
+  features = combined.peaks,
+  cells = colnames(ATAC_MSK103)
+)
+
+ATAC_MSK103[["merge.peaks"]]<-CreateChromatinAssay(feature_MSK103, fragments = Fragments(ATAC_MSK103))
+DefaultAssay(ATAC_MSK103)<-"merge.peaks"
+
+feature_MSK113 <-FeatureMatrix(
+  fragments = Fragments(ATAC_MSK113),
+  features = combined.peaks,
+  cells = colnames(ATAC_MSK113)
+)
+
+ATAC_MSK113[["merge.peaks"]]<-CreateChromatinAssay(feature_MSK113, fragments = Fragments(ATAC_MSK113))
+DefaultAssay(ATAC_MSK113)<-"merge.peaks"
+
+feature_MSK107 <-FeatureMatrix(
+  fragments = Fragments(ATAC_MSK107),
+  features = combined.peaks,
+  cells = colnames(ATAC_MSK107)
+)
+
+ATAC_MSK107[["merge.peaks"]]<-CreateChromatinAssay(feature_MSK107, fragments = Fragments(ATAC_MSK107))
+DefaultAssay(ATAC_MSK107)<-"merge.peaks"
+
+feature_MSK104 <-FeatureMatrix(
+  fragments = Fragments(ATAC_MSK104),
+  features = combined.peaks,
+  cells = colnames(ATAC_MSK104)
+)
+
+ATAC_MSK104[["merge.peaks"]]<-CreateChromatinAssay(feature_MSK104, fragments = Fragments(ATAC_MSK104))
+DefaultAssay(ATAC_MSK104)<-"merge.peaks"
+
+feature_MSK106 <-FeatureMatrix(
+  fragments = Fragments(ATAC_MSK106),
+  features = combined.peaks,
+  cells = colnames(ATAC_MSK106)
+)
+
+ATAC_MSK106[["merge.peaks"]]<-CreateChromatinAssay(feature_MSK106, fragments = Fragments(ATAC_MSK106))
+DefaultAssay(ATAC_MSK106)<-"merge.peaks"
+
+feature_MSK105 <-FeatureMatrix(
+  fragments = Fragments(ATAC_MSK105),
+  features = combined.peaks,
+  cells = colnames(ATAC_MSK105)
+)
+
+ATAC_MSK105[["merge.peaks"]]<-CreateChromatinAssay(feature_MSK105, fragments = Fragments(ATAC_MSK105))
+DefaultAssay(ATAC_MSK105)<-"merge.peaks"
+
+
+unintegrated_b1_b2[["merged"]]<-NULL
+unintegrated_b1_b2[["peaks"]]<-NULL
+
+
+unintegrated_b1_b2 <-merge(combined_MSK101, c(combined_MSK102,combined_MSK108, combined_MSK109, ATAC_MSK115, ATAC_MSK114,ATAC_MSK110, ATAC_MSK111, ATAC_MSK112, ATAC_MSK103, ATAC_MSK113,ATAC_MSK104,ATAC_MSK106,ATAC_MSK107,ATAC_MSK105), add.cell.ids = c("combined_MSK101", "combined_MSK102","combined_MSK108", "combined_MSK109","ATAC_MSK115", "ATAC_MSK114","ATAC_MSK110", "ATAC_MSK111", "ATAC_MSK112", "ATAC_MSK103", "ATAC_MSK113","ATAC_MSK104","ATAC_MSK106","ATAC_MSK107","ATAC_MSK105"))
+unintegrated_b1_b2 <-merge(unintegrated_b1_b2, c(ATAC_MSK104), add.cell.ids = c("","ATAC_MSK104"))
+unintegrated_b1_b2 <-merge(unintegrated_b1_b2, c(ATAC_MSK106), add.cell.ids = c("","ATAC_MSK106"))
+unintegrated_b1_b2 <-merge(unintegrated_b1_b2, c(ATAC_MSK107), add.cell.ids = c("","ATAC_MSK107"))
+unintegrated_b1_b2 <-merge(unintegrated_b1_b2, c(ATAC_MSK105), add.cell.ids = c("","ATAC_MSK105"))
+unintegrated_b1_b2 <-merge(unintegrated_b1_b2, c(ATAC_NB1), add.cell.ids = c("","ATAC_NB1"))
+unintegrated_b1_b2 <-merge(unintegrated_b1_b2, c(ATAC_NB2), add.cell.ids = c("","ATAC_NB2"))
+
+
+DefaultAssay(unintegrated_b1_b2) <- "merge.peaks"
+
+#filtering step added in based on nucleosome signal
+
+# compute nucleosome signal score per cell
+unintegrated_b1_b2 <- NucleosomeSignal(object = unintegrated_b1_b2)
+
+# extract gene annotations from EnsDb
+annotations <- GetGRangesFromEnsDb(ensdb = EnsDb.Hsapiens.v86)
+
+# change to UCSC style since the data was mapped to hg38
+seqlevelsStyle(annotations) <- 'UCSC'
+genome(annotations) <- "hg38"
+
+# add the gene information to the object
+Annotation(unintegrated_b1_b2) <- annotations
+
+unintegrated_b1_b2 <- RunTFIDF(unintegrated_b1_b2)
+unintegrated_b1_b2 <- FindTopFeatures(unintegrated_b1_b2, min.cutoff = 'q50')
+unintegrated_b1_b2 <- RunSVD(unintegrated_b1_b2,n=100)
+
+unintegrated_b1_b2 <- RunUMAP(object = unintegrated_b1_b2, reduction = 'lsi', dims = 2:100)
+unintegrated_b1_b2 <- FindNeighbors(object = unintegrated_b1_b2, reduction = 'lsi', dims = 2:100)
+
+unintegrated_b1_b2 <- FindClusters(object = unintegrated_b1_b2, verbose = FALSE, algorithm = 3)
+pa1<-DimPlot(object = unintegrated_b1_b2, label = TRUE)
+pa2<-DimPlot(object = unintegrated_b1_b2, label = TRUE, group.by = "type")
+pa3<-DimPlot(object = unintegrated_b1_b2, label = TRUE, group.by = "batch")
+pa4<-DimPlot(object = unintegrated_b1_b2, label = TRUE, group.by = "histo")
+pa5<-DimPlot(object = unintegrated_b1_b2, label = TRUE, group.by = "grade")
+
+pa6<-DimPlot(object = unintegrated_b1_b2, label = TRUE, group.by = "patient")
+
+unint_list2<-list(pa1,pa2,pa3,pa4,pa5,pa6)
+wrap_plots(unint_list2, nrow = 2,ncol = 3)
+
+
+saveRDS(unintegrated_b1_b2,file="./Unintegrated_all_ATAC.rds")
+
+#we ID'd the ES cells previously so remove those
+old <- readRDS("Coembed_RNA_ATAC_all_unint.rds")
+unintegrated_b1_b2_ATAC<-readRDS(file="./ATAC_all_unint.rds")
+Remove_these_cells<-Idents(unintegrated_b1_b2_ATAC)[Idents(unintegrated_b1_b2_ATAC)=="Brain/ES"]
+remove(unintegrated_b1_b2_ATAC)
+
+
+rename_df<-data.frame(orig_names=row.names(unintegrated_b1_b2[[]]))
+
+rename_df$changed_name<-gsub(x = rename_df$orig_names,pattern = "^_+",replacement = "",perl = T)
+
+rename_df$isES<-rename_df$changed_name %in% names(Remove_these_cells)
+
+row.names(rename_df)<-rename_df$orig_names
+
+sum(rename_df$isES)
+
+unintegrated_b1_b2<-AddMetaData(unintegrated_b1_b2,rename_df)
+
+unintegrated_b1_b2_ATAC<-subset(unintegrated_b1_b2,subset= isES == FALSE)
+
+unintegrated_b1_b2_ATAC<-RenameCells(unintegrated_b1_b2_ATAC, new.names = unintegrated_b1_b2_ATAC$changed_name)
+
+saveRDS(unintegrated_b1_b2_ATAC,file="./Unintegrated_all_ATAC.rds")
+
+
+# Run Harmony on the unintegrated.test object
+
+library(harmony)
+library(stringr)
+hm.integrated <- RunHarmony(
+  object = unintegrated_b1_b2,
+  group.by.vars = 'batch',
+  reduction = 'lsi',
+  assay.use = 'merge.peaks',
+  project.dim = FALSE
+)
+
+hm.integrated <- RunUMAP(hm.integrated, dims = 2:30, reduction = 'harmony')
+pa1<-DimPlot(object = hm.integrated, label = TRUE)
+pa2<-DimPlot(object = hm.integrated, label = TRUE, group.by = "type")
+pa3<-DimPlot(object = hm.integrated, label = TRUE, group.by = "batch")
+pa4<-DimPlot(object = hm.integrated, label = TRUE, group.by = "histo")
+pa5<-DimPlot(object = hm.integrated, label = TRUE, group.by = "grade")
+
+pa6<-DimPlot(object = hm.integrated, label = TRUE, group.by = "patient")
+
+int_list2<-list(pa1,pa2,pa3,pa4,pa5,pa6)
+wrap_plots(int_list2, nrow = 2,ncol = 3)
+
+saveRDS(hm.integrated,file="./all_ATAC.rds")
+
+################### ChromVar Analysis ###################
+
+library(TFBSTools)
+library(BSgenome.Hsapiens.UCSC.hg38)
+library(JASPAR2020)
+
+int_b1_b2_ATAC<-readRDS(file="./all_ATAC.rds")
+
+ATAC_GAM<-subset(int_b1_b2_ATAC,subset= celltype_K  %in% c("GAMS", "Microglia_Mono"))
+DefaultAssay(ATAC_GAM) <- 'merge.peaks'
+
+ATAC_GAM <- FindTopFeatures(ATAC_GAM, min.cutoff = "q90" )
+ATAC_GAM <- RunTFIDF(ATAC_GAM)
+ATAC_GAM <- RunSVD(ATAC_GAM)
+ATAC_GAM <- RunUMAP(ATAC_GAM, reduction = 'lsi', dims = 2:30, reduction.name = 'umap.GAM')
+DimPlot(ATAC_GAM,group.by = "type")
+
+#analysis of DA markers
+Idents(ATAC_GAM)<-ATAC_GAM$type
+GAM_WT_vs_MUT_markers<-FindMarkers(ATAC_GAM,only.pos = F,min.pct = 0,logfc.threshold = 0.05,ident.1 = "WT",ident.2 = "MUT")
+GAM_WT_vs_MUT_markers2 <- presto:::wilcoxauc.Seurat(X = ATAC_GAM, group_by = 'type',assay = 'data', seurat_assay = 'merge.peaks',min.pct = 0)
+GAM_WT_vs_MUT_markers<-GAM_WT_vs_MUT_markers2[GAM_WT_vs_MUT_markers2$group=="MUT",]
+CoveragePlot(ATAC_GAM,region = StringToGRanges("chrX-73850594-73852041"),group.by = "patient")
+CoveragePlot(ATAC_GAM,region = StringToGRanges("chrX-131740926-131742410"),group.by = "patient")
+CoveragePlot(ATAC_GAM,region = StringToGRanges("chrX-131740926-131742410"),group.by = "patient")
+CoveragePlot(ATAC_GAM,region = StringToGRanges("chr7-121519672-121520827"),group.by = "type")
+
+ClosestFeature(object = ATAC_GAM,regions = StringToGRanges("chr7-121519672-121520827"))
+row.names(GAM_WT_vs_MUT_markers)<-GAM_WT_vs_MUT_markers$feature
+GAM_WT_vs_MUT_markers$chr<-str_split_fixed(row.names(GAM_WT_vs_MUT_markers),pattern = "-",n = 2)[,1]
+MUT_SIG<-GAM_WT_vs_MUT_markers[GAM_WT_vs_MUT_markers$padj<0.05 & GAM_WT_vs_MUT_markers$logFC < -0.2,]
+WT_SIG<-GAM_WT_vs_MUT_markers[GAM_WT_vs_MUT_markers$padj<0.05 & GAM_WT_vs_MUT_markers$logFC>0.2,]
+
+GAM_closest_features<-ClosestFeature(regions = StringToGRanges(row.names(GAM_WT_vs_MUT_markers)),object = ATAC_GAM)
+GAM_WT_vs_MUT_markers$query_region<-row.names(GAM_WT_vs_MUT_markers)
+GAM_WT_vs_MUT_markers<-merge(GAM_WT_vs_MUT_markers,GAM_closest_features,by="query_region",all.x = T)
+GAM_WT_vs_MUT_markers<-na.omit(GAM_WT_vs_MUT_markers)
+GAM_WT_vs_MUT_markers$gene_dist<-paste0(GAM_WT_vs_MUT_markers$gene_name,"_",GAM_WT_vs_MUT_markers$distance)
+
+GAM_WT_vs_MUT_markers$delabel<-GAM_WT_vs_MUT_markers$padj<0.05 & GAM_WT_vs_MUT_markers$logFC < -0.1
+GAM_WT_vs_MUT_markers$delabel[GAM_WT_vs_MUT_markers$delabel==TRUE]<-GAM_WT_vs_MUT_markers$gene_dist[GAM_WT_vs_MUT_markers$delabel==TRUE]
+GAM_WT_vs_MUT_markers$delabel[GAM_WT_vs_MUT_markers$delabel==FALSE]<-NA
+GAM_WT_vs_MUT_markers$delabel[GAM_WT_vs_MUT_markers$padj<0.05 & GAM_WT_vs_MUT_markers$logFC > 0.1] <- GAM_WT_vs_MUT_markers$gene_dist[GAM_WT_vs_MUT_markers$padj<0.05 & GAM_WT_vs_MUT_markers$logFC > 0.15]
+
+GAM_WT_vs_MUT_markers$diffexpressed<-GAM_WT_vs_MUT_markers$padj<0.05 & GAM_WT_vs_MUT_markers$logFC < -0.1
+GAM_WT_vs_MUT_markers$diffexpressed[GAM_WT_vs_MUT_markers$diffexpressed==TRUE]<-"WT"
+GAM_WT_vs_MUT_markers$diffexpressed[GAM_WT_vs_MUT_markers$diffexpressed==FALSE]<-"not_DA"
+GAM_WT_vs_MUT_markers$diffexpressed[GAM_WT_vs_MUT_markers$padj<0.05 & GAM_WT_vs_MUT_markers$logFC > 0.1] <-"MUT"
+
+library(ggrepel)
+# plot adding up all layers we have seen so far
+p<-ggplot(data=GAM_WT_vs_MUT_markers, aes(x=logFC, y=-log10(padj), col=diffexpressed, label=delabel)) +
+        geom_point() + 
+        theme_minimal() +
+        geom_text_repel() +
+        scale_color_manual(values=c("blue", "black", "red")) +
+        geom_vline(xintercept=c(-0.1, 0.1), col="red") +
+        geom_hline(yintercept=-log10(0.05), col="red")
+
+#doGO
+library(rGREAT)
+library(BSgenome.Hsapiens.UCSC.hg38)
+GO_DA <- function (input_peaks,background_peaks=NULL,genome="hg38")
+{
+if (is.null(background_peaks)){
+job = submitGreatJob(input_peaks, species = genome) 
+} else
+{
+job = submitGreatJob(input_peaks, species = genome,bg=background_peaks)
+}
+tb = getEnrichmentTables(job)
+return(tb)
+}
+
+
+GAM_WT_vs_MUT_markers_DA<-GAM_WT_vs_MUT_markers[GAM_WT_vs_MUT_markers$diffexpressed!="not_DA",]
+write.table(GAM_WT_vs_MUT_markers_DA,file = "./DA_GAMS_WT_vs_MUT.txt",quote = F,row.names = F,col.names = T,sep = "\t")
+
+
+#remove x chrom diff
+rowRanges = StringToGRanges(row.names(ATAC_GAM))
+rowRanges<-rowRanges[as.character(seqnames(rowRanges)) %in% c(paste0("chr",1:22),"chrX","chrY")]
+bg_peaks<-GRangesToString(rowRanges)
+WT<-GAM_WT_vs_MUT_markers_DA[GAM_WT_vs_MUT_markers_DA$diffexpressed=="WT",]
+MUT<-GAM_WT_vs_MUT_markers_DA[GAM_WT_vs_MUT_markers_DA$diffexpressed=="MUT",]
+
+
+WT_GREAT<-GO_DA(input_peaks = StringToGRanges(WT$feature),background_peaks = rowRanges,genome = "hg38")
+
+WT_plot<- ggplot(data = head(WT_GREAT$`GO Molecular Function`,n=20),aes(x=name,fill = Hyper_Fold_Enrichment,y=-log10(Hyper_Adjp_BH))) +
+    geom_bar(stat = "identity") +
+    theme_classic() +
+    theme(axis.title.x = element_blank(), axis.text.x = element_text(angle = 90, hjust = 1))
+
+MUT_GREAT<-GO_DA(input_peaks = StringToGRanges(MUT$feature),background_peaks = rowRanges,genome = "hg38")
+
+MUT_plot<- ggplot(data = head(MUT_GREAT$`GO Molecular Function`,n=20),aes(x=name,fill = Hyper_Fold_Enrichment,y=-log10(Hyper_Adjp_BH))) +
+    geom_bar(stat = "identity") +
+    theme_classic() +
+    theme(axis.title.x = element_blank(), axis.text.x = element_text(angle = 90, hjust = 1))
+
+
+counts=GetAssayData(ATAC_GAM,slot = "counts",assay = "merge.peaks")[GRangesToString(rowRanges),]
+ATAC_GAM[["peaks_corr"]]<-CreateChromatinAssay(
+  counts = counts,
+  sep = c("-", "-"),ranges = rowRanges,
+  genome = 'hg38',
+)
+
+DefaultAssay(ATAC_GAM)<-"peaks_corr"
+
+pfm <- getMatrixSet(
+  x = JASPAR2020,
+  opts = list(collection = "CORE", tax_group = 'vertebrates', all_versions = FALSE)
+)
+
+# add motif information
+ATAC_GAM <- AddMotifs(
+  object = ATAC_GAM,
+  genome = BSgenome.Hsapiens.UCSC.hg38,
+  pfm = pfm
+)
+
+ATAC_GAM <- RunChromVAR(
+  object = ATAC_GAM,
+  genome = BSgenome.Hsapiens.UCSC.hg38
+)
+
+DefaultAssay(ATAC_GAM) <- 'chromvar'
+
+differential.activity <- FindMarkers(
+  object = ATAC_GAM,group.by = "type",
+  ident.1 = "WT",
+  ident.2 = 'MUT',
+  only.pos = TRUE,
+  mean.fxn = rowMeans,
+  fc.name = "avg_diff"
+)
+
+MotifPlot(
+  object = ATAC_GAM,
+  motifs = head(rownames(differential.activity),n=10),
+  assay = 'peaks_corr'
+)
+
+MotifPlot(
+  object = ATAC_GAM,
+  motifs = tail(rownames(differential.activity),n=10),
+  assay = 'peaks_corr'
+)
+
+
+saveRDS(ATAC_GAM,file="./GAMS_all_ATAC_chromvar.rds")
+

@@ -497,7 +497,7 @@ RNA_NB2 <- subset(RNA_NB2, subset = nFeature_RNA > 200 & nFeature_RNA < 2500  & 
 saveRDS(RNA_NB2,file="RNA_NB2.rds")
 
 #######################################
-RNA_all<-merge(x=RNA_20201012,y=(list(RNA_20201013,RNA_20201116,RNA_20201117,RNA_0218,RNA_0308,RNA_0330,RNA_0405,RNA_0603,RNA_1119,RNA_117am,RNA_0413,RNA_0628,RNA_0416,RNA_0428)),add.cell.ids = c("RNA_12","RNA_13","RNA_16","RNA_17PM","RNA_18","RNA_08","RNA_30","RNA_05","RNA_03","RNA_19","RNA_17am","RNA_0413","RNA_0628","RNA_0416","RNA_0428"))
+RNA_all<-merge(x=RNA_MSK101,y=(list(RNA_MSK102,RNA_MSK108,RNA_MSK109,RNA_MSK110,RNA_MSK111,RNA_0330,RNA_0405,RNA_0603,RNA_1119,RNA_117am,RNA_0413,RNA_0628,RNA_0416,RNA_0428)),add.cell.ids = c("RNA_12","RNA_13","RNA_16","RNA_17PM","RNA_18","RNA_08","RNA_30","RNA_05","RNA_03","RNA_19","RNA_17am","RNA_0413","RNA_0628","RNA_0416","RNA_0428"))
 
 # Run the standard workflow for visualization and clustering
 RNA_all <- NormalizeData(RNA_all)
@@ -522,8 +522,10 @@ p5<-DimPlot(object = RNA_all, label = TRUE, group.by = "grade")
 p6<-DimPlot(object = RNA_all, label = TRUE, group.by = "patient")
 
 
+
+
 # Subset and subclustering
-RNA_GAMs <- subset(RNA_all, idents = c('combined_GAMs_WT', 'combined_GAMs_MUT'))
+RNA_GAMs <- subset(RNA_all, idents = c('GAMs'))
 
 # Run the standard workflow for visualization and clustering
 RNA_GAMs <- NormalizeData(RNA_GAMs)

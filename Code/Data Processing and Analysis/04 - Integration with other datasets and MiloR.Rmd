@@ -1,0 +1,1138 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+functions
+```{r}
+
+pct<-function(object,features,cells){
+thresh.min <- 0
+  pct.1 <- round(
+    x = rowSums(x = GetAssayData(object,assay = "RNA",slot = "counts")[features, cells, drop = FALSE] > thresh.min) /
+      length(x = cells),
+    digits = 3
+  )
+  return(pct)
+}
+```
+
+#internal NB
+```{r}
+NB<-readRDS("./NB/RNA_NBs.rds")
+
+DimPlot(NB,group.by = "batch")
+DimPlot(NB,group.by = "patient")
+
+```
+
+
+Olah et al ref
+```{r}
+alldat = read.csv("./OUT_lab_val/Olah fastq/Olah_counts.csv",as.is=T,row.names=1,header=T)
+alldat = alldat[grep("^LOC|^MT-|^RP[0-9]|^BC[0-9]|-PS",rownames(alldat),invert=T),]
+alldat = alldat[,which(colSums(alldat)>=1000)]
+
+batchval = read.csv("./OUT_lab_val/Olah fastq/SupplementaryData15.csv",header=T,row.names=1)[,2]
+
+batchval<-data.frame(batchid=batchval)
+row.names(batchval)<-colnames(alldat)
+
+meta<-read.csv(file="./OUT_lab_val/Olah fastq/cell_barcodes.csv")
+
+row.names(meta)<-meta$cellid
+
+row.names(batchval)<-colnames(alldat)
+
+
+Olah <- CreateSeuratObject(counts = as.data.frame(alldat))
+Olah <- AddMetaData(object = Olah, metadata = batchval)
+Olah <- AddMetaData(object = Olah, metadata = meta)
+Olah = NormalizeData(Olah)
+Olah = ScaleData(Olah)
+Olah=FindVariableFeatures(Olah)
+Olah <- RunPCA(object = Olah)
+ElbowPlot(Olah)
+Olah <- FindNeighbors(Olah, dims = 1:20)
+Olah <- FindClusters(Olah, resolution = 0.5)
+Olah <- RunUMAP(Olah, dims = 1:20)
+
+DimPlot(Olah,group.by = "batchid")
+DimPlot(Olah,group.by = "donor")
+
+saveRDS(Olah,file="./OUT_lab_val/Olah_raw.rds")
+
+#MCI1, TLE no AD
+select_levels<-levels(as.factor(Olah$batchid))[c(11:17)]
+Olah_GBM<-subset(Olah,subset= batchid %in% select_levels)
+
+saveRDS(Olah_GBM,file="./OUT_lab_val/Olah_GBM_raw.rds")
+
+```
+
+
+```{r}
+#frederics et al paper.
+fried<-readRDS("./OUT_lab_val/Friedrich.rds")
+
+
+fried$data="Friedrich_2021"
+
+DimPlot(fried,group.by = "Celltype")
+DimPlot(fried,group.by = "Diagnosis")
+
+Idents(fried)<-fried$Celltype
+fried_GBM<-subset(fried,idents=c("Micr","Monocytes"))
+
+```
+
+```{r}
+ABD_files<-list.files("./OUT_lab_val/Abdelfattah et al./")
+ABD_files_final<-list()
+for (x in ABD_files){
+file_name<-readRDS(paste0("./OUT_lab_val/Abdelfattah et al./",x))
+#transposed<-t(GetAssayData(file_name,slot = "counts"))
+
+if(dim(file_name)[1]<dim(file_name)[2])
+{
+print(paste(x,colnames(file_name)[1:5]))
+transposed<-t(GetAssayData(file_name,slot = "counts"))
+gamfile<-CreateSeuratObject(counts = transposed)
+gamfile<-CreateSeuratObject(counts = transposed)
+
+}
+else{gamfile<-file_name}
+
+gamfile <- NormalizeData(gamfile) 
+gamfile <- FindVariableFeatures(gamfile, selection.method = "vst", nfeatures = 2000)
+gamfile <- ScaleData(gamfile)
+gamfile <- RunPCA(gamfile, features = VariableFeatures(object = gamfile))
+gamfile$patient<-x
+ABD_files_final[[x]]<-gamfile
+}
+
+features <- SelectIntegrationFeatures(object.list = ABD_files_final)
+ABD_files_final <- lapply(X = ABD_files_final, FUN = function(x) {
+    x <- ScaleData(x, features = features, verbose = FALSE)
+    x <- RunPCA(x, features = features, verbose = FALSE)
+})
+
+
+ABD_integrated_only_inside <- FindIntegrationAnchors(object.list = ABD_files_final, anchor.features = features, reduction = "rpca")
+
+names_data<-gsub(x=gsub(x=names(ABD_files_final),replacement = "", pattern = "\\.rds"),pattern = "RNA_Abdelfattah_",replacement = "")
+ABD_unintegrated<-merge(ABD_files_final[[1]],ABD_files_final[2:42],add.cell.ids = names_data)
+
+ABD_unintegrated <- NormalizeData(ABD_unintegrated) 
+ABD_unintegrated <- FindVariableFeatures(ABD_unintegrated, selection.method = "vst", nfeatures = 2000)
+ABD_unintegrated <- ScaleData(ABD_unintegrated)
+ABD_unintegrated <- RunPCA(ABD_unintegrated, features = VariableFeatures(object = ABD_unintegrated))
+
+
+library(harmony)
+
+ABD.hm.integrated <- RunHarmony(
+  object = ABD_unintegrated,
+  group.by.vars = 'patient',
+  reduction = 'pca',
+  assay.use = 'RNA',
+  project.dim = FALSE
+)
+
+# re-compute the UMAP using corrected LSI embeddings
+
+
+ABD.hm.integrated <- RunUMAP(ABD.hm.integrated, dims = 1:30, reduction = 'pca')
+
+p1<-DimPlot(ABD.hm.integrated,group.by = "patient",label = T,raster = F)+NoLegend()
+
+ABD.hm.integrated <- RunUMAP(ABD.hm.integrated, dims = 1:30, reduction = 'harmony')
+
+
+p2<-DimPlot(ABD.hm.integrated,group.by = "patient",label = T,raster = F)+NoLegend()
+
+
+ABD.hm.integrated <- FindNeighbors(object = ABD.hm.integrated, reduction = 'harmony', dims = 1:30)
+ABD.hm.integrated <- FindClusters(object = ABD.hm.integrated, verbose = FALSE, algorithm = 3,resolution = 0.1)
+
+pa<-DimPlot(ABD.hm.integrated,label = T,raster = F)+NoLegend()
+
+p1<-VlnPlot(ABD.hm.integrated,features = "CD68")
+p2<-VlnPlot(ABD.hm.integrated,features = "PTPRC")
+p3<-VlnPlot(ABD.hm.integrated,features = "S100A8")
+
+DotPlot(ABD.hm.integrated,features = c("PTPRC","ITGAM","ITGAX","S100A8","CD68","CD4"))
+
+saveRDS(ABD.hm.integrated,"./Integrated_abd_seurat.rds")
+ABD.hm.integrated<-readRDS("./Integrated_abd_seurat.rds")
+wrap_plots(list(pa,p1,p2,p3),ncol = 2,nrow = 2)
+
+saveRDS(ABD_unintegrated,"./Unintegrated_abd_seurat.rds")
+
+ABD_unintegrated<-readRDS("./Unintegrated_abd_seurat.rds")
+ABD_GAM<-subset(ABD_unintegrated,cells=WhichCells(ABD.hm.integrated,idents = 0))
+
+ABD_GAM$abd<-as.factor(str_split_fixed(colnames(ABD_GAM),pattern = "_",n = 2)[,1])
+ABD_GAM$dataset="ABD"
+ABD_GAM2=subset(ABD_GAM,subset=abd %in% levels(ABD_GAM$abd)[c(1:25)])
+
+meta<-read.csv("./OUT_lab_val/mmeta_abd.txt")
+
+add.meta<-meta[match(ABD_GAM2$abd,row.names(meta)),]
+row.names(add.meta)<-row.names(ABD_GAM2[[]])
+ABD_GAM2<-AddMetaData(ABD_GAM2,add.meta)
+ABD_GAM2$patient<ABD_GAM2$Names
+
+saveRDS(ABD_GAM2,"./Unintegrated_abd_GAM_seurat.rds")
+```
+
+Our data prep, remove duds
+```{r}
+
+RNA_all<-readRDS(file="./RNA_all_unint.rds")
+
+RNA_all$celltype_K <-Idents(RNA_all)
+RNA_GAM<-subset(RNA_all,subset= celltype_K  %in% c("GAMS/DC", "Microglia_Mono"))
+
+#subset to only idents 1-7 others are duds
+idents<-read.csv("./clusters_idents.csv.filepart")
+row.names(idents)<-idents$X
+idents$X<-NULL
+
+
+RNA_GAM<-AddMetaData(RNA_GAM,metadata = idents)
+Idents(RNA_GAM)<-RNA_GAM$clusters
+
+RNA_GAM<-subset(RNA_GAM,idents = c(1:7))
+```
+
+
+```{r}
+Olah_GBM$dataset="Olah"
+fried_GBM$dataset="Friedr"
+ABD_GAM2$dataset="ABD"
+
+RNA_GAM$dataset="Inlab"
+NB$dataset="Inlab_ctr"
+
+Olah_GBM$patient<-Olah_GBM$donor
+fried_GBM$patient=fried_GBM$ID
+
+all_unintegrated<-merge(x=RNA_GAM,y=c(Olah_GBM,fried_GBM,ABD_GAM2,NB),add.cell.ids =c("IL","OL","FR","ABD","NB"))
+
+all_unintegrated <- NormalizeData(all_unintegrated) 
+all_unintegrated <- FindVariableFeatures(all_unintegrated, selection.method = "vst", nfeatures = 2000)
+all_unintegrated <- ScaleData(all_unintegrated)
+all_unintegrated <- RunPCA(all_unintegrated, features = VariableFeatures(object = all_unintegrated))
+
+all_unintegrated <- RunUMAP(all_unintegrated, dims = 1:30, reduction = 'pca')
+
+p1a<-DimPlot(all_unintegrated,group.by = "patient",label = T,raster = F)+NoLegend()
+p2a<-DimPlot(all_unintegrated,group.by = "dataset",label = T,raster = F)+NoLegend()
+
+ABD.hm.integrated_sub <- RunHarmony(
+  object = all_unintegrated_sub,
+  group.by.vars = c('patient'),
+  reduction = 'pca',
+  assay.use = 'RNA',
+  project.dim = FALSE
+)
+
+ABD.hm.integrated_sub <- RunUMAP(ABD.hm.integrated_sub, dims = 1:30, reduction = 'pca')
+
+p1<-DimPlot(ABD.hm.integrated_sub,group.by = "patient",label = T,raster = F)+NoLegend()
+
+ABD.hm.integrated_sub <- RunUMAP(ABD.hm.integrated_sub, dims = 1:30, reduction = 'harmony')
+
+
+p1b<-DimPlot(ABD.hm.integrated_sub,group.by = "patient",label = T,raster = F,pt.size = 0.2)+NoLegend()
+p2b<-DimPlot(ABD.hm.integrated_sub,group.by = "dataset",label = T,raster = F,pt.size = 0.2)+NoLegend()
+
+
+#wrap_plots(list(p1a,p1b,p2a,p2b),ncol = 2,nrow = 2)
+
+Idents(ABD.hm.integrated_sub)<-"dataset"
+Ol<-DimPlot(ABD.hm.integrated_sub,group.by = "dataset",label = T,raster = F,pt.size = 0.5,cells.highlight = WhichCells(object = ABD.hm.integrated_sub,idents = "Olah"))+NoLegend()+ggtitle("Olah")
+ctr<-DimPlot(ABD.hm.integrated_sub,group.by = "dataset",label = T,raster = F,pt.size = 0.5,cells.highlight = WhichCells(object = ABD.hm.integrated_sub,idents = "Inlab_ctr"))+NoLegend()+ggtitle("Inlab ctr")
+frd<-DimPlot(ABD.hm.integrated_sub,group.by = "dataset",label = T,raster = F,pt.size = 0.5,cells.highlight = WhichCells(object = ABD.hm.integrated_sub,idents = "Friedr"))+NoLegend()+ggtitle("Friedrich")
+Abd<-DimPlot(ABD.hm.integrated_sub,group.by = "dataset",label = T,raster = F,pt.size = 0.5,cells.highlight = WhichCells(object = ABD.hm.integrated_sub,idents = "ABD"))+NoLegend()+ggtitle("ABD")
+Inlab<-DimPlot(ABD.hm.integrated_sub,group.by = "dataset",label = T,raster = F,pt.size = 0.5,cells.highlight = WhichCells(object = ABD.hm.integrated_sub,idents = "Inlab"))+NoLegend()+ggtitle("Inlab")
+wrap_plots(list(p1b,p2b,Ol,ctr,Abd,Inlab,frd),ncol = 3,nrow = 3)
+
+
+
+ABD.hm.integrated_sub <- FindNeighbors(object = ABD.hm.integrated_sub, reduction = 'harmony', dims = 1:30)
+ABD.hm.integrated_sub <- FindClusters(object = ABD.hm.integrated_sub, verbose = FALSE, algorithm = 3,resolution = 0.3)
+
+
+AllMarkerspos<-FindAllMarkers(ABD.hm.integrated_sub,logfc.threshold = 0.5,only.pos = T)
+write.csv(AllMarkerspos,file="./All_markers_integrated_clust_OPos.csv")
+
+#lets see proportions
+
+bd<-table(data.frame(DS=ABD.hm.integrated_sub$dataset,cl=ABD.hm.integrated_sub$RNA_snn_res.0.3))
+bd2<-t(acast(data.frame(bd),formula = DS~cl,value.var = "Freq"))
+
+div<-t(matrix(rep(colSums(bd2),times=10),ncol = 10,nrow=5))
+g<-bd2/div
+H1<-Heatmap(g,cell_fun = function(j, i, x, y, width, height, fill) {
+        grid.text(sprintf("%.4f", g[i, j]), x, y, gp = gpar(fontsize = 10))
+})
+
+
+
+p1c<-DimPlot(ABD.hm.integrated_sub)
+
+
+wrap_plots(list(p1b,p2b,p1c),ncol = 2,nrow = 2)
+
+
+#lets do relative abundace
+
+#Idents(ABD.hm.integrated)<-ABD.hm.integrated$dataset
+#ant_deg<-FindMarkers(ABD.hm.integrated,ident.1 = "Antunes")
+#write.csv(ant_deg,file = "./ant_deg_markers.csv")
+
+
+p4<-DimPlot(ABD.hm.integrated_sub,label = T,raster = F,pt.size = 1)+NoLegend()
+
+
+saveRDS(ABD.hm.integrated_sub,file = "./All_inlab_outlab_hm_int_sub.rds")
+
+#see if rtPCA does better
+
+ABD.hm.integrated_sub
+
+
+# split the dataset into a list of two seurat objects (stim and CTRL)
+datasets <- SplitObject(ABD.hm.integrated_sub, split.by = "dataset")
+
+# normalize and identify variable features for each dataset independently
+datasets <- lapply(X = datasets, FUN = function(x) {
+    x <- NormalizeData(x)
+    x <- FindVariableFeatures(x, selection.method = "vst", nfeatures = 2000)
+})
+
+
+
+# select features that are repeatedly variable across datasets for integration run PCA on each
+# dataset using these features
+features <- SelectIntegrationFeatures(object.list = datasets,nfeatures = 2000)
+
+datasets <- lapply(X = datasets, FUN = function(x) {
+    x <- ScaleData(x, features = features, verbose = FALSE)
+    x <- RunPCA(x, features = features, verbose = FALSE)
+})
+
+sc.anchors <- FindIntegrationAnchors(object.list = datasets, anchor.features = features, reduction = "rpca")
+All.rpca.combined <- IntegrateData(anchorset = sc.anchors)
+
+# specify that we will perform downstream analysis on the corrected data note that the
+# original unmodified data still resides in the 'RNA' assay
+DefaultAssay(All.rpca.combined) <- "integrated"
+
+# Run the standard workflow for visualization and clustering
+All.rpca.combined <- ScaleData(All.rpca.combined, verbose = FALSE)
+All.rpca.combined <- RunPCA(All.rpca.combined, npcs = 30, verbose = FALSE)
+All.rpca.combined <- RunUMAP(All.rpca.combined, reduction = "pca", dims = 1:30)
+All.rpca.combined <- FindNeighbors(All.rpca.combined, reduction = "pca", dims = 1:30)
+All.rpca.combined <- FindClusters(All.rpca.combined, resolution = 0.5)
+
+p1b<-DimPlot(All.rpca.combined,group.by = "patient",label = T,raster = F)+NoLegend()
+p2b<-DimPlot(All.rpca.combined,group.by = "dataset",label = T,raster = F)+NoLegend()
+
+
+```
+
+
+```{r}
+#miloR analysis filtered out exam score and non microglial pops (Zaki's)
+#add
+
+#first we did an analysis with all in and outlab analyzed data. Then did a sub analysis for the inlab stuff
+ABD.hm.integrated<-readRDS(file = "./All_inlab_outlab_hm_int_sub.rds")
+#ABD.hm.integrated<-readRDS(file = "./RNA_GAMs_Azimuth_labels.rds")
+#ABD.hm.integrated<-subset(ABD.hm.integrated,)
+module<-read.csv("./Gene_modules_paper/TAM_atlas_modules.csv",header = T)
+labels<-c("doublet/cont","cell-cycle","Stress-sig","Aging","Pro-inf-I","cDC2","INF","Naive","Tumor-support","MES-like","Hypoxia","Anti-inf","Pro-inf-II","Bona-fide-MG")
+names(module)<-labels
+module_l<-as.list(module)
+
+
+mod2<-lapply(module_l,function(x){x[x!=""]})
+ABD.hm.integrated<-AddModuleScore(
+  ABD.hm.integrated,
+  mod2,name = c("doublet/cont","cell-cycle","Stress-sig","Aging","Pro-inf-I","cDC2","INF","Naive","Tumor-support","MES-like","Hypoxia","Anti-inf","Pro-inf-II","Bona-fide-MG"))
+#proportions of WT, MUT, CTR
+
+FeaturePlot(ABD.hm.integrated,features = c("doublet.cont1","cell.cycle2","Stress.sig3","Aging4","Pro.inf.I5","cDC26","INF7","Naive8","Tumor.support9","MES.like10","Hypoxia11","Anti.inf12","Pro.inf.II13","Bona.fide.MG14"))
+
+VlnPlot(ABD.hm.integrated,features = c("doublet.cont1","cell.cycle2","Stress.sig3","Aging4","Pro.inf.I5","cDC26","INF7","Naive8","Tumor.support9","MES.like10","Hypoxia11","Anti.inf12","Pro.inf.II13","Bona.fide.MG14"))
+
+a<-readRDS("./ATAC_gene_activity/ATAC_final_subset_2_0805_gene_activity.rds")
+lab<-read.csv("./ATAC_gene_activity/RNA_ATAC_matching_azimuth_labels.csv")
+
+lab<-lab[!duplicated(lab$ATAC),]
+
+row.names(lab)<-lab$ATAC
+lab$RNA<-NULL
+
+
+DefaultAssay(a)<-"RNA"
+a<-AddMetaData(a,lab)
+
+
+a<-AddModuleScore(
+  a,
+  mod2,name = c("doublet/cont","cell-cycle","Stress-sig","Aging","Pro-inf-I","cDC2","INF","Naive","Tumor-support","MES-like","Hypoxia","Anti-inf","Pro-inf-II","Bona-fide-MG"))
+
+Idents(a)<-a$predicted.annotation_level_4
+
+B<-VlnPlot(a,features = c("doublet.cont1","cell.cycle2","Stress.sig3","Aging4","Pro.inf.I5","cDC26","INF7","Naive8","Tumor.support9","MES.like10","Hypoxia11","Anti.inf12","Pro.inf.II13","Bona.fide.MG14"),pt.size = 0)
+
+B<-FeaturePlot(a,features = c("doublet.cont1","cell.cycle2","Stress.sig3","Aging4","Pro.inf.I5","cDC26","INF7","Naive8","Tumor.support9","MES.like10","Hypoxia11","Anti.inf12","Pro.inf.II13","Bona.fide.MG14"))
+
+DimPlot(a,label=T)
+
+FeaturePlot(a,features = c("Hypoxia11"))
+
+pfm <- getMatrixSet(
+  x = JASPAR2020,
+  opts = list(collection = "CORE", tax_group = 'vertebrates', all_versions = FALSE)
+)
+
+
+a[["good peaks"]]<-as.ChromatinAssay(a[["merged"]])
+DefaultAssay(a)<-"good.peaks"
+# add motif information
+a <- AddMotifs(
+  object = a,
+  genome = "BSgenome.Hsapiens.UCSC.hg38",
+  pfm = pfm
+)
+
+
+
+#lets see proportions
+
+bd<-table(data.frame(DS=ABD.hm.integrated$IDH_simp,cl=ABD.hm.integrated_sub$RNA_snn_res.0.3))
+bd2<-t(acast(data.frame(bd),formula = DS~cl,value.var = "Freq"))
+
+div<-t(matrix(rep(colSums(bd2),times=10),ncol = 10,nrow=4))
+g<-bd2/div
+H1<-Heatmap(g,cell_fun = function(j, i, x, y, width, height, fill) {
+        grid.text(sprintf("%.4f", g[i, j]), x, y, gp = gpar(fontsize = 10))
+})
+
+
+library(miloR)
+library(SingleCellExperiment)
+library(scater)
+library(scran)
+library(dplyr)
+
+ABD.hm.integrated_sce <- as.SingleCellExperiment(ABD.hm.integrated)
+ABD.hm.integrated_milo <- Milo(ABD.hm.integrated_sce)
+
+ABD.hm.integrated_milo <- buildGraph(ABD.hm.integrated_milo, k = 30, d = 30,reduced.dim = "HARMONY")
+ABD.hm.integrated_milo <- makeNhoods(ABD.hm.integrated_milo, prop = 0.1, k = 30, d=30, refined = TRUE)
+plotNhoodSizeHist(ABD.hm.integrated_milo)
+ABD.hm.integrated_milo <- countCells(ABD.hm.integrated_milo, meta.data = data.frame(SingleCellExperiment::colData(ABD.hm.integrated_milo)), sample="patient")
+
+table(data.frame(a=colData(ABD.hm.integrated_milo)$ident,b=colData(ABD.hm.integrated_milo)$type))
+
+
+exp_design <- data.frame(SingleCellExperiment::colData(ABD.hm.integrated_milo))[,c("dataset", "patient", "type","grade")]
+row.names(exp_design)<-NULL
+exp_design<-unique(exp_design)
+row.names(exp_design)<-exp_design$patient
+exp_design[exp_design$dataset=="Olah",]
+
+exp_design2<-ABD.hm.integrated[[]][,c("dataset", "patient","type")]
+row.names(exp_design2)<-NULL
+exp_design2<-unique(exp_design2)
+row.names(exp_design2)<-exp_design2$patient
+
+exp_design3<-ABD.hm.integrated[[]][,c("dataset", "patient","type")]
+row.names(exp_design3)<-NULL
+exp_design3<-unique(exp_design3)
+row.names(exp_design3)<-exp_design3$patient
+exp_design3$DIS<-as.factor(exp_design3$type)
+levels(exp_design3$DIS) <- c("DIS", "CTR","DIS")
+
+exp_design4<-ABD.hm.integrated[[]][,c("dataset", "patient","type")]
+row.names(exp_design4)<-NULL
+exp_design4<-unique(exp_design4)
+row.names(exp_design4)<-exp_design4$patient
+exp_design4$MUT<-as.factor(exp_design4$type)
+levels(exp_design4$MUT) <- c("MUT", "OTHER","OTHER")
+
+exp_design5<-ABD.hm.integrated[[]][,c("dataset", "patient","type")]
+row.names(exp_design5)<-NULL
+exp_design5<-unique(exp_design5)
+row.names(exp_design5)<-exp_design5$patient
+exp_design5$WT<-as.factor(exp_design5$type)
+levels(exp_design5$WT) <- c("OTHER", "OTHER","WT")
+
+exp_design3b<-ABD.hm.integrated[[]][,c("dataset", "patient","type")]
+row.names(exp_design3b)<-NULL
+exp_design3b<-unique(exp_design3b)
+row.names(exp_design3b)<-exp_design3b$patient
+exp_design3b$CTR<-as.factor(exp_design3b$type)
+levels(exp_design3b$CTR) <- c("DIS","CTR","DIS")
+
+#grade analysis
+
+exp_design_gr1<-ABD.hm.integrated[[]][,c("dataset", "patient","grade")]
+row.names(exp_design_gr1)<-NULL
+exp_design_gr1<-unique(exp_design_gr1)
+row.names(exp_design_gr1)<-exp_design_gr1$patient
+exp_design_gr1$gr1<-as.factor(exp_design_gr1$grade)
+levels(exp_design_gr1$gr1) <- c("lg","lg","other","other")
+
+exp_design_gr2<-ABD.hm.integrated[[]][,c("dataset", "patient","grade")]
+row.names(exp_design_gr2)<-NULL
+exp_design_gr2<-unique(exp_design_gr2)
+row.names(exp_design_gr2)<-exp_design_gr2$patient
+exp_design_gr2$gr2<-as.factor(exp_design_gr2$grade)
+levels(exp_design_gr2$gr2) <- c("other","other","hg","other")
+
+exp_design_gr3<-ABD.hm.integrated[[]][,c("dataset", "patient","grade")]
+row.names(exp_design_gr3)<-NULL
+exp_design_gr3<-unique(exp_design_gr3)
+row.names(exp_design_gr3)<-exp_design_gr3$patient
+exp_design_gr3$gr3<-as.factor(exp_design_gr3$grade)
+levels(exp_design_gr3$gr3) <- c("other","other","other","ctr")
+
+ABD.hm.integrated_milo <- calcNhoodDistance(ABD.hm.integrated_milo, d=30, reduced.dim = "HARMONY")
+
+
+fr<-unique(data.frame(type=as.factor(ABD.hm.integrated[[]][ABD.hm.integrated$dataset=="Friedr",]$Diagnosis),ABD.hm.integrated[[]][ABD.hm.integrated$dataset=="Friedr",]$ID))
+levels(fr$type)<-c("NB","MUT","WT")
+row.names(fr)<-fr$ABD.hm.integrated.....ABD.hm.integrated.dataset.....Friedr...
+fr$ABD.hm.integrated.....ABD.hm.integrated.dataset.....Friedr...<-NULL
+fr$WT<-fr$type
+levels(fr$WT)<-c("OTHER","OTHER","WT")
+fr$grade<-fr$type
+levels(fr$grade)<-c("NB",4,4)
+fr$dataset<-"Friedr"
+
+meta<-read.csv("./OUT_lab_val/mmeta_abd.txt")
+
+abd<-unique(data.frame(type=as.factor(ABD.hm.integrated[[]][ABD.hm.integrated$dataset=="ABD",]$patient),ABD.hm.integrated[[]][ABD.hm.integrated$dataset=="ABD",]$IDH.status))
+abd<-unique(data.frame(patient=row.names(meta),type=as.factor(meta$MGMT_status),grade=as.factor(meta$Diagnosis)))
+levels(abd$grade)<-c(2,4)
+levels(abd$type)<-c("MUT","WT")
+abd$WT<-abd$type
+levels(abd$WT)<-c("OTHER","WT")
+abd$dataset<-"ABD"
+
+#add to dis vs CTR
+exp_design3[exp_design3$dataset=="Olah",]$type<-"NB"
+exp_design3[exp_design3$dataset=="Olah",]$DIS<-"CTR"
+exp_design3_fin<-na.omit(exp_design3)
+
+fr_dis<-fr
+fr_dis$WT<-NULL
+fr_dis$grade<-NULL
+fr_dis$patient<-row.names(fr_dis)
+fr_dis$DIS<-fr_dis$type
+levels(fr_dis$DIS)<-c("CTR","DIS","DIS")
+
+abd_dis<-abd
+abd_dis$WT<-NULL
+abd_dis$grade<-NULL
+abd_dis$patient<-paste0("RNA_Abdelfattah_",abd_dis$patient,".rds")
+row.names(abd_dis)<-abd_dis$patient
+abd_dis$DIS<-abd_dis$type
+levels(abd_dis$DIS)<-c("CTR","DIS","DIS")
+
+exp_design3_fin<-rbind(exp_design3_fin,abd_dis,fr_dis)
+
+#now MUt
+
+exp_design4[exp_design4$dataset=="Olah",]$type<-"NB"
+exp_design4[exp_design4$dataset=="Olah",]$MUT<-"OTHER"
+exp_design4_fin<-na.omit(exp_design4)
+
+fr_dis<-fr
+fr_dis$grade<-NULL
+fr_dis$WT<-NULL
+fr_dis$patient<-row.names(fr_dis)
+fr_dis$MUT<-fr$type
+levels(fr_dis$MUT)<-c("OTHER","MUT","OTHER")
+
+abd_dis<-abd
+abd_dis$WT<-NULL
+abd_dis$grade<-NULL
+abd_dis$patient<-paste0("RNA_Abdelfattah_",abd_dis$patient,".rds")
+row.names(abd_dis)<-abd_dis$patient
+abd_dis$MUT<-abd_dis$type
+levels(abd_dis$MUT)<-c("MUT","OTHER")
+
+exp_design4_fin<-rbind(exp_design4_fin,abd_dis,fr_dis)
+
+
+#WT
+exp_design5[exp_design5$dataset=="Olah",]$type<-"NB"
+exp_design5[exp_design5$dataset=="Olah",]$WT<-"OTHER"
+exp_design5_fin<-na.omit(exp_design5)
+
+fr_dis<-fr
+fr_dis$grade<-NULL
+fr_dis$patient<-row.names(fr_dis)
+
+
+abd_dis<-abd
+abd_dis$grade<-NULL
+abd_dis$patient<-paste0("RNA_Abdelfattah_",abd_dis$patient,".rds")
+row.names(abd_dis)<-abd_dis$patient
+
+exp_design5_fin<-rbind(exp_design5_fin,abd_dis,fr_dis)
+
+#now low grade
+exp_design_gr1[exp_design_gr1$dataset=="Olah",]$grade<-"NB"
+exp_design_gr1[exp_design_gr1$dataset=="Olah",]$gr1<-"other"
+exp_design_gr1_fin<-na.omit(exp_design_gr1)
+
+fr_dis<-fr
+fr_dis$WT<-NULL
+fr_dis$type<-NULL
+fr_dis$patient<-row.names(fr_dis)
+fr_dis$gr1<-fr_dis$grade
+levels(fr_dis$gr1)<-c("other","other")
+
+
+abd_dis<-abd
+abd_dis$WT<-NULL
+abd_dis$type<-NULL
+abd_dis$patient<-paste0("RNA_Abdelfattah_",abd_dis$patient,".rds")
+row.names(abd_dis)<-abd_dis$patient
+abd_dis$gr1<-abd_dis$grade
+levels(abd_dis$gr1)<-c("lg","other")
+
+exp_design_gr1_fin<-rbind(exp_design_gr1_fin,abd_dis,fr_dis)
+
+#high grade
+#now low grade
+exp_design_gr2[exp_design_gr2$dataset=="Olah",]$grade<-"NB"
+exp_design_gr2[exp_design_gr2$dataset=="Olah",]$gr2<-"other"
+exp_design_gr2_fin<-na.omit(exp_design_gr2)
+
+
+
+fr_dis<-fr
+fr_dis$WT<-NULL
+fr_dis$type<-NULL
+fr_dis$patient<-row.names(fr_dis)
+fr_dis$gr2<-fr_dis$grade
+levels(fr_dis$gr2)<-c("other","hg")
+
+
+abd_dis<-abd
+abd_dis$WT<-NULL
+abd_dis$type<-NULL
+abd_dis$patient<-paste0("RNA_Abdelfattah_",abd_dis$patient,".rds")
+row.names(abd_dis)<-abd_dis$patient
+abd_dis$gr2<-abd_dis$grade
+levels(abd_dis$gr2)<-c("other","hg")
+
+exp_design_gr2_fin<-rbind(exp_design_gr2_fin,abd_dis,fr_dis)
+
+#look at actual diff
+
+A<-as.factor(colData(ABD.hm.integrated_milo)$type)
+
+levels(A)<-c("MUT","OTHER","OTHER")
+
+colData(ABD.hm.integrated_milo)$MUT<-A
+
+
+A<-as.factor(colData(ABD.hm.integrated_milo)$type)
+
+levels(A)<-c("OTHER", "OTHER","WT")
+colData(ABD.hm.integrated_milo)$WT<-A
+
+A<-as.factor(colData(ABD.hm.integrated_milo)$type)
+
+levels(A)<-c("OTHER", "CTR","OTHER")
+colData(ABD.hm.integrated_milo)$CTR<-A
+
+da_results_WT <- testNhoods(ABD.hm.integrated_milo, design = ~ WT, design.df = exp_design5_fin)
+da_results_MUT <- testNhoods(ABD.hm.integrated_milo, design = ~ MUT, design.df = exp_design4_fin)
+#da_results_dis <- testNhoods(ABD.hm.integrated_milo, design = ~ DIS, design.df = exp_design3)
+da_results_ctr <- testNhoods(ABD.hm.integrated_milo, design = ~ DIS, design.df = exp_design3_fin)
+
+
+da_results_high <- testNhoods(ABD.hm.integrated_milo, design = ~ gr2, design.df = exp_design_gr2_fin)
+da_results_low <- testNhoods(ABD.hm.integrated_milo, design = ~ gr1, design.df = exp_design_gr1_fin)
+#da_results_dis <- testNhoods(ABD.hm.integrated_milo, design = ~ DIS, design.df = exp_design3)
+#da_results_ctr2 <- testNhoods(ABD.hm.integrated_milo, design = ~ gr3, design.df = exp_design_gr3)
+
+## Plot single-cell UMAP
+umap_pl_WT <- plotReducedDim(ABD.hm.integrated_milo, dimred = "UMAP", colour_by="WT", 
+                          text_size = 3, point_size=0.5,) +guides(fill="none")
+## Plot neighbourhood graph
+nh_graph_pl_WT <- plotNhoodGraphDA(ABD.hm.integrated_milo, da_results_WT, layout="UMAP",alpha=0.1) 
+
+## Plot single-cell UMAP
+umap_pl_MUT <- plotReducedDim(ABD.hm.integrated_milo, dimred = "UMAP", colour_by="MUT", 
+                          text_size = 3, point_size=0.5) +guides(fill="none")
+## Plot neighbourhood graph
+nh_graph_pl_MUT <- plotNhoodGraphDA(ABD.hm.integrated_milo, da_results_MUT, layout="UMAP",alpha=0.1) 
+
+## Plot single-cell UMAP
+umap_pl_DIS <- plotReducedDim(ABD.hm.integrated_milo, dimred = "UMAP", colour_by="DIS", 
+                          text_size = 3, point_size=0.5) +guides(fill="none")
+## Plot neighbourhood graph
+nh_graph_pl_DIS <- plotNhoodGraphDA(ABD.hm.integrated_milo, da_results_dis, layout="UMAP",alpha=0.1) 
+## Plot neighbourhood graph
+nh_graph_pl_CTR <- plotNhoodGraphDA(ABD.hm.integrated_milo, da_results_ctr, layout="UMAP",alpha = 0.1) 
+
+
+nh_graph_pl_high <- plotNhoodGraphDA(ABD.hm.integrated_milo, da_results_high, layout="UMAP",alpha=0.1) 
+
+nh_graph_pl_low <- plotNhoodGraphDA(ABD.hm.integrated_milo, da_results_low, layout="UMAP",alpha=0.1) 
+nh_graph_pl_ctr2 <- plotNhoodGraphDA(ABD.hm.integrated_milo, da_results_ctr2, layout="UMAP",alpha=0.1) 
+
+WT<-subset(ABD.hm.integrated,idents="WT")
+MUT<-subset(ABD.hm.integrated,idents="MUT")
+CTR<-subset(ABD.hm.integrated,idents="NB")
+
+df <-CTR@reductions$umap@cell.embeddings %>% as.data.frame()
+
+get_density <- function(x, y, ...) {
+  dens <- MASS::kde2d(x, y, ...)
+  ix <- findInterval(x, dens$x)
+  iy <- findInterval(y, dens$y)
+  ii <- cbind(ix, iy)
+  return(dens$z[ii])
+}
+
+df$density <- get_density(df$UMAP_1, df$UMAP_2, n = 100)
+
+
+p_wt<-ggplot(df) +
+  geom_point(aes(UMAP_1, UMAP_2, color = density), size=1) +
+  viridis::scale_color_viridis()+theme_classic()
+p_wt<-p_wt+ggtitle("WT")
+
+p_mut<-ggplot(df) +
+  geom_point(aes(UMAP_1, UMAP_2, color = density), size=1) +
+  viridis::scale_color_viridis()+theme_classic()
+p_mut<-p_mut+ggtitle("MUT")
+
+p_ctr<-ggplot(df) +
+  geom_point(aes(UMAP_1, UMAP_2, color = density), size=1) +
+  viridis::scale_color_viridis()+theme_classic()
+p_ctr<-p_ctr+ggtitle("CTR")
+
+p_mut2<-DimPlot(MUT,group.by = "predicted.annotation_level_4",pt.size = 1,label = T)
+p_wt2<-DimPlot(WT,group.by = "predicted.annotation_level_4",pt.size = 1,label = T)
+p_ctr2<-DimPlot(CTR,group.by = "predicted.annotation_level_4",pt.size = 1,label = T)
+
+
+#invert
+da_results_ctr$logFC<-da_results_ctr$logFC*-1
+umap_pl_MUT + nh_graph_pl_MUT +plot_layout(guides="collect")
+umap_pl_DIS + nh_graph_pl_DIS +plot_layout(guides="collect")
+umap_pl_WT+ nh_graph_pl_WT +plot_layout(guides="collect")
+
+umap_pl_DIS + nh_graph_pl_CTR +plot_layout(guides="collect")
+
+
+da_results_WT <- annotateNhoods(ABD.hm.integrated_milo, da_results_WT, coldata_col = "ident")
+head(da_results_WT)
+ggplot(da_results_WT, aes(ident_fraction)) + geom_histogram(bins=50)
+#da_results_WT$celltype <- ifelse(da_results_WT$ident_fraction < 0.8, "Mixed", da_results_WT$ident)
+p1<-plotDAbeeswarm(da_results_WT, group.by = "ident",alpha = 0.2)+ggtitle("WT")
+da_results_MUT <- annotateNhoods(ABD.hm.integrated_milo, da_results_MUT, coldata_col = "ident")
+p2<-plotDAbeeswarm(da_results_MUT, group.by = "ident",alpha = 0.2)+ggtitle("MUT")
+da_results_ctr <- annotateNhoods(ABD.hm.integrated_milo, da_results_ctr, coldata_col = "ident")
+p3<-plotDAbeeswarm(da_results_ctr, group.by = "ident",alpha = 0.2)+ggtitle("CTR")
+
+## Exclude zero counts genes
+keep.rows <- rowSums(logcounts(ABD.hm.integrated_milo)) != 0
+ABD.hm.integrated_milo <- ABD.hm.integrated_milo[keep.rows, ]
+## Find HVGs
+dec <- modelGeneVar(ABD.hm.integrated_milo)
+hvgs <- getTopHVGs(dec, n=2000)
+
+# Add log normalized count to Milo object
+ABD.hm.integrated_milo <- logNormCounts(ABD.hm.integrated_milo)
+da_results_WT$NhoodGroup <- as.numeric(da_results_WT$SpatialFDR < 0.1 & da_results_WT$logFC < 0)
+da_nhood_markers <- findNhoodGroupMarkers(ABD.hm.integrated_milo, da_results_WT, subset.row = hvgs,subset.groups = da_results_WT$ident=="TAM-BDM hypoxia/MES")
+
+#can we see what sets WT aside from others in the hypoxia group
+
+TESt <- testDiffExp(ABD.hm.integrated_milo, da_results_WT, meta.data = data.frame(colData(ABD.hm.integrated_milo)),
+                     subset.row = rownames(ABD.hm.integrated_milo)[1:10], subset.nhoods=da_results$ident=="TAM-BDM hypoxia/MES")
+
+plotDAbeeswarm(da_results_WT, group.by = "celltype")
+
+da_results_MUT <- annotateNhoods(ABD.hm.integrated_milo, da_results_MUT, coldata_col = "RNA_snn_res.0.3")
+head(da_results_MUT)
+
+plotDAbeeswarm(da_results_MUT, group.by = "RNA_snn_res.0.3")
+
+
+da_results_dis <- annotateNhoods(ABD.hm.integrated_milo, da_results_dis, coldata_col = "RNA_snn_res.0.3")
+head(da_results_dis)
+
+plotDAbeeswarm(da_results_dis, group.by = "RNA_snn_res.0.3")
+
+da_results_ctr <- annotateNhoods(ABD.hm.integrated_milo, da_results_ctr, coldata_col = "RNA_snn_res.0.3")
+head(da_results_dis)
+
+plotDAbeeswarm(da_results_ctr, group.by = "RNA_snn_res.0.3")
+
+da_results_ctr <- annotateNhoods(ABD.hm.integrated_milo, da_results_ctr, coldata_col = "idh_comb")
+da_results_ctr <- annotateNhoods(ABD.hm.integrated_milo, da_results_ctr, coldata_col = "ident")
+da_results_ctr <- annotateNhoods(ABD.hm.integrated_milo, da_results_ctr, coldata_col = "IDH_simp")
+
+
+da_results_dis <- annotateNhoods(ABD.hm.integrated_milo, da_results_dis, coldata_col = "RNA_snn_res.0.3")
+da_results_dis <- annotateNhoods(ABD.hm.integrated_milo, da_results_dis, coldata_col = "ident")
+da_results_dis <- annotateNhoods(ABD.hm.integrated_milo, da_results_dis, coldata_col = "IDH_simp")
+
+da_results_WT <- annotateNhoods(ABD.hm.integrated_milo, da_results_WT, coldata_col = "RNA_snn_res.0.3")
+da_results_WT <- annotateNhoods(ABD.hm.integrated_milo, da_results_WT, coldata_col = "ident")
+da_results_WT <- annotateNhoods(ABD.hm.integrated_milo, da_results_WT, coldata_col = "IDH_simp")
+
+da_results_MUT <- annotateNhoods(ABD.hm.integrated_milo, da_results_MUT, coldata_col = "RNA_snn_res.0.3")
+da_results_MUT <- annotateNhoods(ABD.hm.integrated_milo, da_results_MUT, coldata_col = "ident")
+da_results_MUT <- annotateNhoods(ABD.hm.integrated_milo, da_results_MUT, coldata_col = "IDH_simp")
+
+
+## Add log normalized count to Milo object
+ABD.hm.integrated_milo <- logNormCounts(ABD.hm.integrated_milo)
+
+## Run buildNhoodGraph to store nhood adjacency matrix
+ABD.hm.integrated_milo <- buildNhoodGraph(ABD.hm.integrated_milo)
+
+## Find groups
+da_results_ctr <- groupNhoods(ABD.hm.integrated_milo, da_results_ctr, max.lfc.delta = 0.5)
+da_results_dis <- groupNhoods(ABD.hm.integrated_milo, da_results_dis, max.lfc.delta = 0.5)
+da_results_MUT <- groupNhoods(ABD.hm.integrated_milo, da_results_MUT, max.lfc.delta = 0.5)
+da_results_WT <- groupNhoods(ABD.hm.integrated_milo, da_results_WT, max.lfc.delta = 0.5)
+
+
+CTR_p1<-plotDAbeeswarm(da_results_ctr, "RNA_snn_res.0.3")
+CTR_p2<-plotDAbeeswarm(da_results_ctr, "NhoodGroup")
+CTR_p3<-plotDAbeeswarm(da_results_ctr, "ident")
+CTR_p4<-plotDAbeeswarm(da_results_ctr, "IDH_simp")
+CTRall<-CTR_p1+CTR_p2+CTR_p3+CTR_p4
+
+DIS_p1<-plotDAbeeswarm(da_results_dis, "RNA_snn_res.0.3")
+DIS_p2<-plotDAbeeswarm(da_results_dis, "NhoodGroup")
+DIS_p3<-plotDAbeeswarm(da_results_dis, "ident")
+DIS_p4<-plotDAbeeswarm(da_results_dis, "IDH_simp")
+DISall<-DIS_p1+DIS_p2+DIS_p3+DIS_p4
+
+WT_p1<-plotDAbeeswarm(da_results_WT, "RNA_snn_res.0.3")
+WT_p2<-plotDAbeeswarm(da_results_WT, "NhoodGroup")
+WT_p3<-plotDAbeeswarm(da_results_WT, "ident")
+WT_p4<-plotDAbeeswarm(da_results_WT, "IDH_simp")
+WTall<-WT_p1+WT_p2+WT_p3+WT_p4
+
+MUT_p1<-plotDAbeeswarm(da_results_MUT, "RNA_snn_res.0.3")
+MUT_p2<-plotDAbeeswarm(da_results_MUT, "NhoodGroup")
+MUT_p3<-plotDAbeeswarm(da_results_MUT, "ident")
+MUT_p4<-plotDAbeeswarm(da_results_MUT, "IDH_simp")
+MUTall<-MUT_p1+MUT_p2+MUT_p3+MUT_p4
+
+#what are pure neighborhoods
+
+Nhood_sel_WT<-da_results_WT[da_results_WT$logFC > 2 & da_results_WT$SpatialFDR<0.001,"Nhood"]
+Nhood_sel_MUT<-da_results_MUT[da_results_MUT$logFC > 2 & da_results_MUT$SpatialFDR<0.001,"Nhood"]
+Nhood_sel_CTR<-da_results_ctr[da_results_ctr$logFC > 2 & da_results_ctr$SpatialFDR<0.001,"Nhood"]
+
+purer_neigh_WT<-row.names(ABD.hm.integrated_milo@nhoods)[rowSums(ABD.hm.integrated_milo@nhoods[,Nhood_sel_WT])>0]
+purer_neigh_MUT<-row.names(ABD.hm.integrated_milo@nhoods)[rowSums(ABD.hm.integrated_milo@nhoods[,Nhood_sel_MUT])>0]
+purer_neigh_CTR<-row.names(ABD.hm.integrated_milo@nhoods)[rowSums(ABD.hm.integrated_milo@nhoods[,Nhood_sel_CTR])>0]
+
+#because of inversion
+Nhood_sel_lg<-da_results_low[da_results_low$logFC > 2 & da_results_low$SpatialFDR<0.001,"Nhood"]
+Nhood_sel_hg<-da_results_high[da_results_high$logFC > 2 & da_results_high$SpatialFDR<0.001,"Nhood"]
+
+purer_neigh_lg<-row.names(ABD.hm.integrated_milo@nhoods)[rowSums(ABD.hm.integrated_milo@nhoods[,Nhood_sel_lg])>0]
+purer_neigh_hg<-row.names(ABD.hm.integrated_milo@nhoods)[rowSums(ABD.hm.integrated_milo@nhoods[,Nhood_sel_hg])>0]
+
+saveRDS(ABD.hm.integrated_milo,"./Milo_all.rds")
+write.csv(da_results_ctr,"./CTR.table.nhoods.csv")
+write.csv(da_results_dis,"./DIS.table.nhoods.csv")
+write.csv(da_results_MUT,"./MUT.table.nhoods.csv")
+write.csv(da_results_WT,"./WT.table.nhoods.csv")
+
+saveRDS(ABD.hm.integrated,"./Seurat_post_milo_ready.int.rds")
+
+pa<-DimPlot(ABD.hm.integrated,cells.highlight = purer_neigh_WT,cols.highlight = "#e26275")+ggtitle("purest WT")
+pb<-DimPlot(ABD.hm.integrated,cells.highlight = purer_neigh_MUT,cols.highlight = "#00b2ca")+ggtitle("purest MUT")
+pc<-DimPlot(ABD.hm.integrated,cells.highlight = purer_neigh_CTR,cols.highlight = "#fbdf88")+ggtitle("purest CTR")
+
+pa+pb+pc
+
+pa<-pa+NoLegend()
+pb<-pb+NoLegend()
+pc<-pc+NoLegend()
+
+legend_ctr<-cowplot::get_legend(nh_graph_pl_CTR)
+grid.newpage()
+grid.draw(c(legend_ctr,legend_WT))
+legend_WT<-cowplot::get_legend(nh_graph_pl_WT)
+grid.newpage()
+grid.draw(legend_WT)
+legend_MUT<-cowplot::get_legend(nh_graph_pl_MUT)
+grid.newpage()
+grid.draw(legend_MUT)
+
+nh_graph_pl_CTR<-nh_graph_pl_CTR+NoLegend()
+
+nh_graph_pl_WT<-nh_graph_pl_WT+NoLegend()
+
+nh_graph_pl_MUT<-nh_graph_pl_MUT+NoLegend()
+
+wrap_plots(list(pa,nh_graph_pl_WT,pb,nh_graph_pl_MUT,pc,nh_graph_pl_CTR),ncol = 2,nrow = 3)
+
+wrap_plots(list(nh_graph_pl_WT,pa,nh_graph_pl_MUT,pb,nh_graph_pl_CTR,pc),ncol = 2,nrow = 3)
+
+
+ABD.hm.integrated.pure<-subset(ABD.hm.integrated, cells=c(purer_neigh_WT,purer_neigh_MUT,purer_neigh_CTR))
+p1<-DimPlot(ABD.hm.integrated.pure,group.by = "IDH_simp")
+
+ABD.hm.integrated.pure<-NormalizeData(ABD.hm.integrated.pure)
+ABD.hm.integrated.pure <- FindVariableFeatures(ABD.hm.integrated.pure, selection.method = "vst", nfeatures = 2000)
+
+ABD.hm.integrated.pure<-ScaleData(ABD.hm.integrated.pure,features = row.names(ABD.hm.integrated.pure))
+
+ABD.hm.integrated.pure<-RunPCA(ABD.hm.integrated.pure)
+ABD.hm.integrated.pure<-RunUMAP(ABD.hm.integrated.pure,dims = 1:20)
+
+p2<-DimPlot(ABD.hm.integrated.pure,group.by = "IDH_simp")
+
+ABD.hm.integrated.pure<-RunHarmony(object = ABD.hm.integrated.pure,dims.use = 1:20, group.by.vars = "patient")
+
+
+dge_smp_wt <- findNhoodMarkers(x=ABD.hm.integrated_milo, da.res = da_results_WT,compute.new = F,
+                                     assay = "counts", gene.offset = FALSE, da.fdr = 0.01,lfc.threshold = 2,
+                                     aggregate.samples = TRUE, sample_col = "sample",return.groups = T,
+                                     )
+dge_smp_mut <- findNhoodMarkers(x=ABD.hm.integrated_milo, da.res = da_results_MUT,compute.new = F,
+                                     assay = "counts", gene.offset = FALSE, da.fdr = 0.01,lfc.threshold = 2,
+                                     aggregate.samples = TRUE, sample_col = "sample",return.groups = T,
+                                     )
+dge_smp_dis <- findNhoodMarkers(x=ABD.hm.integrated_milo, da.res = da_results_dis,compute.new = F,
+                                     assay = "counts", gene.offset = FALSE, da.fdr = 0.01,lfc.threshold = 2,
+                                     aggregate.samples = TRUE, sample_col = "sample",return.groups = T,
+                                     )
+
+dge_smp_ctr <- findNhoodMarkers(x=ABD.hm.integrated_milo, da.res = da_results_ctr,compute.new = F,
+                                     assay = "counts", gene.offset = FALSE, da.fdr = 0.01,lfc.threshold = 2,
+                                     aggregate.samples = TRUE, sample_col = "sample",return.groups = T,
+                                     )
+
+
+ABD.hm.integrated<-AddMetaData(ABD.hm.integrated,metadata = dge_smp_wt$groups)
+p_nhoodgroup_wt_all<-DimPlot(ABD.hm.integrated,group.by = "Nhood.Group")
+ABD.hm.integrated<- PercentageFeatureSet(ABD.hm.integrated, pattern = "^RP[SL][[:digit:]]|^RPLP[[:digit:]]|^RPSA", col.name = "percent.ribo")
+ABD.hm.integrated<- PercentageFeatureSet(ABD.hm.integrated, pattern = "^RP[SL][[:digit:]]|^RPLP[[:digit:]]|^RPSA", col.name = "percent.ribo")
+ABD.hm.integrated[["percent.mt"]] <- PercentageFeatureSet(ABD.hm.integrated, pattern = "^MT-")
+Idents(ABD.hm.integrated)<-"Nhood.Group"
+WT<-FindAllMarkers(object = ABD.hm.integrated,latent.vars = c("percent.mt","percent.ribo"),test.use = "MAST",)
+WTvsMUT<-FindMarkers(object = ABD.hm.integrated,latent.vars = c("percent.mt","percent.ribo"),test.use = "MAST",ident.1 = 2,ident.2 = 3)
+
+feat<-c(head(row.names(WTvsMUT[order(WTvsMUT$avg_log2FC),]),n=100),tail(row.names(WTvsMUT[order(WTvsMUT$avg_log2FC),]),n=100))
+
+
+ABD.hm.integrated_wt<-subset(ABD.hm.integrated,subset = IDH_simp == "WT")
+ABD.hm.integrated<-AddMetaData(ABD.hm.integrated,metadata = dge_smp_mut$groups)
+ABD.hm.integrated_mut<-subset(ABD.hm.integrated,subset = IDH_simp == "MUT")
+p_nhoodgroup_wt<-DimPlot(ABD.hm.integrated_wt,group.by = "Nhood.Group")
+p_nhoodgroup_mut<-DimPlot(ABD.hm.integrated_mut,group.by = "Nhood.Group")
+ABD.hm.integrated<-AddMetaData(ABD.hm.integrated,metadata = dge_smp_mut$groups)
+ABD.hm.integrated_ctr<-subset(ABD.hm.integrated,subset = IDH_simp == "CTR")
+p_nhoodgroup_ctr<-DimPlot(ABD.hm.integrated_ctr,group.by = "Nhood.Group")
+
+
+
+dge_smp<-dge_smp_wt
+markers <- dge_smp$dge[which(dge_smp$dge$adj.P.Val_1 < 0.0001 & dge_smp$dge$logFC_1 > 2 ), ]
+markers2 <- dge_smp$dge[which(dge_smp$dge$adj.P.Val_2 < 0.0001 & dge_smp$dge$logFC_2 > 2 ),]
+markers3 <- dge_smp$dge[which(dge_smp$dge$adj.P.Val_3 < 0.0001 & dge_smp$dge$logFC_3 > 2 ),]
+markers4 <- dge_smp$dge[which(dge_smp$dge$adj.P.Val_4 < 0.0001 & dge_smp$dge$logFC_4 > 2 ),]
+markers5 <- dge_smp$dge[which(dge_smp$dge$adj.P.Val_5 < 0.0001 & dge_smp$dge$logFC_5 >0 ),]
+
+markers1<-markers[order(markers$adj.P.Val_1,decreasing = F),"GeneID"]
+markers2<-markers2[order(markers2$adj.P.Val_2,decreasing = F),"GeneID"]
+markers3<-markers3[order(markers3$adj.P.Val_3,decreasing = F),"GeneID"]
+markers4<-markers4[order(markers4$adj.P.Val_4,decreasing = F),"GeneID"]
+
+FeaturePlot(ABD.hm.integrated_wt,features = c(markers2)[1:10])
+
+m1=pct(object = ABD.hm.integrated,markers1,cells=colnames(ABD.hm.integrated))
+
+markers[order(markers$logFC_1,decreasing = T),]
+
+logcounts(ABD.hm.integrated_milo) <- log1p(counts(ABD.hm.integrated_milo))
+ABD.hm.integrated_milo <- calcNhoodExpression(ABD.hm.integrated_milo, subset.row=c(markers2,markers3,markers4,markers5))
+
+WT_examp<-plotNhoodExpressionDA(ABD.hm.integrated_milo, da_results_WT[which(da_results_WT$logFC < -1 | da_results_WT$logFC > 1),], features = unique(c(head(WT[WT$cluster==2,]$gene,n=100),head(WT[WT$cluster==3,]$gene,n=100))),
+                  #    subset.nhoods = da_results$IDH_simp %in% c("WT"),
+                      assay="logcounts",show_rownames = F,
+                      scale_to_1 = T, cluster_features = F,
+                      )
+
+
+WTMUT_examp<-plotNhoodExpressionDA(ABD.hm.integrated_milo, da_results_WT[which(da_results_WT$logFC < -1 | da_results_WT$logFC > 1),], features = feat,
+                  #    subset.nhoods = da_results$IDH_simp %in% c("WT"),
+                      assay="logcounts",show_rownames = F,
+                      scale_to_1 = T, cluster_features = F,
+                      )
+
+dge_smp<-dge_smp_mut
+markers <- dge_smp$dge[which(dge_smp$dge$adj.P.Val_1 < 0.0001 & dge_smp$dge$logFC_1 > 1 ), ]
+markers2 <- dge_smp$dge[which(dge_smp$dge$adj.P.Val_2 < 0.0001 & dge_smp$dge$logFC_2 > 1 ),]
+markers3 <- dge_smp$dge[which(dge_smp$dge$adj.P.Val_3 < 0.0001 & dge_smp$dge$logFC_3 > 1 ),]
+markers4 <- dge_smp$dge[which(dge_smp$dge$adj.P.Val_4 < 0.0001 & dge_smp$dge$logFC_4 > 1 ),]
+markers5 <- dge_smp$dge[which(dge_smp$dge$adj.P.Val_5 < 0.0001 & dge_smp$dge$logFC_5 > 1 ),]
+
+markers1<-markers[order(markers$adj.P.Val_1,decreasing = F),"GeneID"]
+markers2<-markers2[order(markers2$adj.P.Val_2,decreasing = F),"GeneID"]
+markers3<-markers3[order(markers3$adj.P.Val_3,decreasing = F),"GeneID"]
+markers4<-markers4[order(markers4$adj.P.Val_4,decreasing = F),"GeneID"]
+markers5<-markers5[order(markers5$adj.P.Val_5,decreasing = F),"GeneID"]
+
+logcounts(ABD.hm.integrated_milo) <- log1p(counts(ABD.hm.integrated_milo))
+ABD.hm.integrated_milo <- calcNhoodExpression(ABD.hm.integrated_milo, subset.row=c(markers5))
+
+MUT_examp<-plotNhoodExpressionDA(ABD.hm.integrated_milo, da_results_MUT[which(da_results_MUT$logFC < -1 | da_results_MUT$logFC > 1),], features = c(markers5[1:89],markers1[1:320],markers2[1:100]),
+                  #    subset.nhoods = da_results$IDH_simp %in% c("WT"),
+                      assay="logcounts",show_rownames = F,
+                      scale_to_1 = T, cluster_features = F,
+                      )
+
+
+dge_smp<-dge_smp_ctr
+markers <- dge_smp$dge[which(dge_smp$dge$adj.P.Val_1 < 0.0001 & dge_smp$dge$logFC_1 > 1 ), ]
+markers2 <- dge_smp$dge[which(dge_smp$dge$adj.P.Val_2 < 0.0001 & dge_smp$dge$logFC_2 > 1 ),]
+markers3 <- dge_smp$dge[which(dge_smp$dge$adj.P.Val_3 < 0.0001 & dge_smp$dge$logFC_3 > 1 ),]
+markers4 <- dge_smp$dge[which(dge_smp$dge$adj.P.Val_4 < 0.0001 & dge_smp$dge$logFC_4 > 1 ),]
+markers5 <- dge_smp$dge[which(dge_smp$dge$adj.P.Val_5 < 0.0001 & dge_smp$dge$logFC_5 > 1 ),]
+
+markers1<-markers[order(markers$adj.P.Val_1,decreasing = F),"GeneID"]
+markers2<-markers2[order(markers2$adj.P.Val_2,decreasing = F),"GeneID"]
+markers3<-markers3[order(markers3$adj.P.Val_3,decreasing = F),"GeneID"]
+markers4<-markers4[order(markers4$adj.P.Val_4,decreasing = F),"GeneID"]
+markers5<-markers5[order(markers5$adj.P.Val_5,decreasing = F),"GeneID"]
+
+logcounts(ABD.hm.integrated_milo) <- log1p(counts(ABD.hm.integrated_milo))
+ABD.hm.integrated_milo <- calcNhoodExpression(ABD.hm.integrated_milo, subset.row=c(markers1,markers2,markers3,markers4,markers5))
+
+CTR_examp<-plotNhoodExpressionDA(ABD.hm.integrated_milo, da_results_ctr[which(da_results_ctr$logFC < -0.5 | da_results_ctr$logFC > 0.5),], features = c(markers1[1:100],markers2[1:100]),
+                  #    subset.nhoods = da_results$IDH_simp %in% c("WT"),
+                      assay="logcounts",show_rownames = F,
+                      scale_to_1 = T, cluster_features = F,
+                      )
+
+
+FeaturePlot(ABD.hm.integrated_wt,features = c(markers1)[1:10])
+FeaturePlot(ABD.hm.integrated_wt,features = c(markers2)[1:10])
+FeaturePlot(ABD.hm.integrated_wt,features = c(markers3)[1:10])
+FeaturePlot(ABD.hm.integrated_wt,features = c(markers4)[1:10])
+FeaturePlot(ABD.hm.integrated_wt,features = c(markers5)[1:10])
+
+head(da_results_ctr)
+
+plotNhoodGroups(ABD.hm.integrated_milo, da_results_ctr, layout="UMAP") 
+plotDAbeeswarm(da_results_ctr, "NhoodGroup")
+#or 
+
+da_results_ctr$NhoodGroup <- as.factor(as.numeric(da_results_ctr$SpatialFDR < 0.1 & da_results_ctr$logFC > 0))
+
+plotNhoodGroups(ABD.hm.integrated_milo, da_results_ctr, layout="UMAP") 
+plotDAbeeswarm(da_results_ctr, "NhoodGroup")
+
+#DE
+
+da_nhood_markers <- findNhoodGroupMarkers(ABD.hm.integrated_milo, da_results_ctr, subset.row = rownames(ABD.hm.integrated_milo)[1:10], 
+                                          aggregate.samples = TRUE, sample_col = "sample")
+
+da_nhood_markers2 <- findNhoodGroupMarkers(ABD.hm.integrated_milo, da_results_ctr, subset.row = rownames(ABD.hm.integrated_milo)[1:10])
+
+
+
+CTR_p1<-plotDAbeeswarm(da_results_ctr, "RNA_snn_res.0.3")
+
+CTR_p2<-plotDAbeeswarm(da_results_ctr, "NhoodGroup")
+
+CTR_p3<-plotDAbeeswarm(da_results_ctr, "ident")
+
+CTR_p4<-plotDAbeeswarm(da_results_ctr, "idh_simp")
+CTR_p1+CTR_p2++CTR_p2
+
+
+plotDAbeeswarm(da_results_ctr, "NhoodGroup")
+
+plotDAbeeswarm(groupNhoods(ABD.hm.integrated_milo, da_results_ctr, max.lfc.delta = 0.5), group.by = "NhoodGroup") + ggtitle("max LFC delta=0.5")
+plotDAbeeswarm(groupNhoods(ABD.hm.integrated_milo, da_results_ctr, max.lfc.delta = 1) , group.by = "NhoodGroup") + ggtitle("max LFC delta=1")
+plotDAbeeswarm(groupNhoods(ABD.hm.integrated_milo, da_results_ctr, max.lfc.delta = 2)   , group.by = "NhoodGroup") + ggtitle("max LFC delta=2")
+plotDAbeeswarm(groupNhoods(ABD.hm.integrated_milo, da_results_ctr, max.lfc.delta = 3)   , group.by = "NhoodGroup") + ggtitle("max LFC delta=3")
+plotDAbeeswarm(groupNhoods(ABD.hm.integrated_milo, da_results_ctr, max.lfc.delta = 3, overlap=1), group.by = "NhoodGroup") + ggtitle("overlap=1")
+plotDAbeeswarm(groupNhoods(ABD.hm.integrated_milo, da_results_ctr, max.lfc.delta = 3, overlap=5) , group.by = "NhoodGroup") + ggtitle("overlap=5")
+plotDAbeeswarm(groupNhoods(ABD.hm.integrated_milo, da_results_ctr, max.lfc.delta = 3, overlap=10)   , group.by = "NhoodGroup") + ggtitle("overlap=10")
+plotDAbeeswarm(groupNhoods(ABD.hm.integrated_milo, da_results_ctr, max.lfc.delta = 3, overlap=20)   , group.by = "NhoodGroup") + ggtitle("overlap=20")
+
+```
+
+
+```{r}
+ABD.hm.integrated<-readRDS(file = "./All_inlab_outlab_hm_int.csv")
+
+df_mut1=data.frame(idh_comb=ABD.hm.integrated[[]][ABD.hm.integrated$dataset=="Inlab",]$type)
+row.names(df_mut1)<-row.names(ABD.hm.integrated[[]][ABD.hm.integrated$dataset=="Inlab",])
+
+meta<-read.csv("./OUT_lab_val/Abdelfattah et al./metadata.txt",header = T)
+
+a<-data.frame(idh_comb=ABD.hm.integrated[[]][ABD.hm.integrated$dataset=="ABD",])
+
+meta_corr<-meta[a$idh_comb.abd,]
+row.names(meta_corr)<-row.names(a)
+
+df_mut2=data.frame(idh_comb=meta_corr$MGMT.status)
+row.names(df_mut2)<-row.names(meta_corr)
+
+df_mut3=data.frame(idh_comb=rep("Normal", times=length(row.names(ABD.hm.integrated[[]][ABD.hm.integrated$dataset=="Olah",]))))
+row.names(df_mut3)<-row.names(ABD.hm.integrated[[]][ABD.hm.integrated$dataset=="Olah",])
+
+df_mut3b=data.frame(idh_comb=rep("Normal", times=length(row.names(ABD.hm.integrated[[]][ABD.hm.integrated$dataset=="Inlab_ctr",]))))
+row.names(df_mut3b)<-row.names(ABD.hm.integrated[[]][ABD.hm.integrated$dataset=="Inlab_ctr",])
+
+
+df_mut4=data.frame(idh_comb=ABD.hm.integrated[[]][ABD.hm.integrated$dataset=="Friedr",]$Diagnosis)
+row.names(df_mut4)<-row.names(ABD.hm.integrated[[]][ABD.hm.integrated$dataset=="Friedr",])
+
+df_mut_all<-rbind(df_mut1,df_mut2,df_mut3,df_mut3b,df_mut4)
+
+ABD.hm.integrated<-AddMetaData(ABD.hm.integrated,df_mut_all)
+
+DimPlot(ABD.hm.integrated,group.by = "idh_comb")
+
+ABD.hm.integrated$IDH_simp<-as.factor(ABD.hm.integrated$idh_comb)
+levels(ABD.hm.integrated$IDH_simp) <- c("NORMAL", "MUT","WT","MUT","MUT","NORMAL","WT","WT")
+
+pall<-DimPlot(ABD.hm.integrated,group.by = "IDH_simp",label = T,pt.size = 0.5)
+p_wt<-DimPlot(ABD.hm.integrated,cells.highlight = row.names(ABD.hm.integrated[[]])[ABD.hm.integrated$IDH_simp=="WT"],label = T,pt.size = 0.5)+ ggtitle("WT")
+p_mt<-DimPlot(ABD.hm.integrated,cells.highlight = row.names(ABD.hm.integrated[[]])[ABD.hm.integrated$IDH_simp=="MUT"],label = T,pt.size = 0.5)+ ggtitle("MUT")
+p_ct<-DimPlot(ABD.hm.integrated,cells.highlight = row.names(ABD.hm.integrated[[]])[ABD.hm.integrated$IDH_simp=="Ctr"],label = T,pt.size = 0.5)+ ggtitle("CTR Friedrich")
+p_nm<-DimPlot(ABD.hm.integrated,cells.highlight = row.names(ABD.hm.integrated[[]])[ABD.hm.integrated$IDH_simp=="NORMAL"],label = T,pt.size = 0.5)+ ggtitle("Normal micr")
+
+
+all_highlight<-wrap_plots(list(p_wt,p_mt,p_ct,p_nm),ncol = 2,nrow = 2)
+
+all_highlight
+
+saveRDS(ABD.hm.integrated,file = "./All_inlab_outlab_hm_int.rds")
+
+```
+
+
