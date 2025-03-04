@@ -1,0 +1,37 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+RNA_GAMs <- readRDS(file="./RNA_GAMs.rds")
+
+RNA_GAM <- SCTransform(RNA_GAM)
+DefaultAssay(RNA_GAM) <- "SCT" 
+
+# Rerun UMAP 
+RNA_GAM <- RunPCA(RNA_GAM,npcs = 50)
+RNA_GAM <- RunUMAP(RNA_GAM, reduction = "pca", dims = 1:50, return.model = TRUE)
+
+gbm_azimuth<-readRDS("./azimuth_ref/azimuth_core_GBmap.rds")
+
+gbm_azimuth <- SCTransform(gbm_azimuth)
+DefaultAssay(gbm_azimuth) <- "SCT" 
+gbm_azimuth <- RunUMAP(gbm_azimuth, reduction = "pca", dims = 1:50, return.model = TRUE)
+
+gbm_ref <- AzimuthReference(gbm_azimuth, refUMAP='umap',
+                              refDR='pca',
+                              plotref='umap',
+                              refAssay = 'SCT',
+                              metadata = c("annotation_level_1", "annotation_level_2","annotation_level_3","annotation_level_4"))   
+
+saveRDS(object = gbm_ref, file =  "./azimuth_ref/ref.Rds", compress=F)
+SaveAnnoyIndex(object = gbm_ref[["refdr.annoy.neighbors"]], file = "./azimuth_ref/idx.annoy")
+
+LoadReference("./azimuth_ref/") 
+
+AzimuthApp(reference= "./azimuth_ref/", demodataset = './azimuth_ref/RNA.query.all_cells_subs_2.rds',config = './azimuth_ref/config.json')
+
+AzimuthApp(reference= "./azimuth_ref/", demodataset = './ATAC_gene_activity/ATAC_gene_activity.rds',config = './azimuth_ref/config.json')
+
+```
